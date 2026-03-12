@@ -3,6 +3,8 @@ package api
 import (
 	"net/http"
 
+	"rwaGateway/internal/services"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -19,11 +21,22 @@ func VerifyKYC(c *gin.Context) {
 		return
 	}
 
-	// 这里应该调用KYC服务进行验证
-	// 暂时返回模拟响应
+	// 调用KYC服务进行验证
+	kycService := services.NewOnfidoAPI()
+	success, verificationId, err := kycService.VerifyKYC(request.UserAddress, request.VerificationData)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	if !success {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "KYC verification failed"})
+		return
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
-		"verificationId": "KYC-123456",
+		"verificationId": verificationId,
 		"userId": request.UserAddress,
 		"message": "KYC verification successful",
 	})

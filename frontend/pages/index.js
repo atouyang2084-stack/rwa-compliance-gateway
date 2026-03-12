@@ -1,4 +1,5 @@
 import Head from 'next/head'
+import Link from 'next/link'
 import { ConnectButton } from '@rainbow-me/rainbowkit'
 
 export default function Home() {
@@ -12,7 +13,12 @@ export default function Home() {
       <main className="container mx-auto px-4 py-8">
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-3xl font-bold text-gray-800">RWA Compliance Gateway</h1>
-          <ConnectButton />
+          <div className="flex items-center space-x-4">
+            <Link href="/kyc" className="text-blue-600 hover:text-blue-800 font-medium">
+              KYC验证
+            </Link>
+            <ConnectButton />
+          </div>
         </div>
 
         <div className="bg-white rounded-lg shadow-md p-6">

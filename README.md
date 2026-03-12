@@ -233,6 +233,42 @@ rwaGateway/
 - 后端API测试：使用Go测试框架
 - 前端测试：使用Jest和React Testing Library
 - 智能合约测试：使用Hardhat或Truffle
+- 系统集成测试：使用Node.js测试脚本
+
+### 系统集成测试
+
+#### 运行KYC流程测试
+1. 进入测试目录：
+   ```bash
+   cd test
+   ```
+
+2. 安装依赖：
+   ```bash
+   npm install
+   ```
+
+3. 启动后端服务：
+   ```bash
+   cd ../backend && go run main.go
+   ```
+
+4. 运行测试脚本：
+   ```bash
+   cd ../test && node kyc_integration_test.js
+   ```
+
+#### 测试内容
+- 健康检查API
+- KYC验证流程
+- 资产审计追踪API
+
+## 系统要求
+
+- **后端**：Go 1.21.0+
+- **前端**：Node.js 18.0+
+- **智能合约**：Solidity 0.8.20+
+- **测试**：Node.js 18.0+
 
 ### 部署
 - 后端：容器化部署，支持Kubernetes
