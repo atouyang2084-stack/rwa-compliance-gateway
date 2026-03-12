@@ -277,9 +277,9 @@ rwaGateway/
 
 ## 联系方式
 
-- 项目维护者：[Your Name]
-- 邮箱：[your.email@example.com]
-- 仓库地址：[GitHub Repository URL]
+- 项目维护者：[Wong壁虎]
+- 邮箱：[atouyang@163.com]
+- 仓库地址：[https://github.com/atouyang2084-stack/rwa-compliance-gateway]
 
 ---
 
