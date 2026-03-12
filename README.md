@@ -1,0 +1,286 @@
+# RWA Compliance Gateway
+
+## 项目概述
+
+RWA Compliance Gateway是一个连接链下现实世界资产(RWA)与链上DeFi生态的合规准入网关。它解决了机构资产上链时的身份校验(KYC)、洗钱防范(AML)以及跨司法管辖区的合规自动执行问题。
+
+### 核心价值
+- **合规验证**：集成第三方KYC服务，为用户生成链上可验证凭证
+- **风险控制**：实时同步制裁名单，自动拦截风险地址
+- **权限管理**：基于角色的访问控制，区分资产发行方、投资者、托管方和监管者
+- **资产代币化**：支持ERC-3643或ERC-1400标准，实现资产价值与链上代币的1:1锚定
+- **合规规则**：可编程限制，包括持有者数量上限、单一账户最大持仓限制、转账白名单强制校验
+
+## 技术架构
+
+### 层级结构
+
+| 层级 | 技术栈 | 职责描述 |
+|------|--------|----------|
+| 应用层(Frontend) | Next.js + RainbowKit | 提供机构端后台与投资者Dashboard |
+| 接入层(Gateway) | Go / Node.js (NestJS) | 处理API请求、签名转发、交易预检查 |
+| 合规层(Middleware) | Chainlink Functions + ZK-Proof | 链下合规数据证明转换，保护用户隐私 |
+| 合约层(Blockchain) | Solidity (Ethereum/Polygon) | 核心业务逻辑、权限控制、资产发行 |
+| 数据层(Indexing) | The Graph (Subgraphs) | 检索链上资产流转记录及合规日志 |
+
+## 项目结构
+
+```
+rwaGateway/
+├── backend/               # Go后端项目
+│   ├── api/              # API路由和处理器
+│   ├── config/           # 配置管理
+│   ├── internal/         # 内部服务和中间件
+│   │   ├── handlers/     # 请求处理器
+│   │   ├── middleware/   # 中间件
+│   │   └── services/     # 业务服务
+│   ├── pkg/              # 公共包
+│   │   └── utils/        # 工具函数
+│   ├── main.go           # 后端入口文件
+│   └── go.mod            # Go模块配置
+├── frontend/              # Next.js前端项目
+│   ├── app/              # App Router页面
+│   ├── components/       # 组件
+│   ├── lib/              # 工具库
+│   ├── pages/            # 页面
+│   ├── public/           # 静态资源
+│   ├── package.json      # 前端依赖配置
+│   └── next.config.js    # Next.js配置
+├── contracts/             # 智能合约
+│   └── ComplianceRegistry.sol  # 合规注册表接口
+├── .env.example          # 环境变量示例
+├── .gitignore            # Git忽略文件
+└── README.md             # 项目文档
+```
+
+## 核心功能模块
+
+### 1. 身份与权限管理 (DID & Role-based Access Control)
+- **合规验证**：集成第三方KYC服务，为用户生成链上可验证凭证(VC)
+- **黑名单机制**：实时同步制裁名单（如OFAC），自动拦截风险地址
+- **角色定义**：区分资产发行方(Issuer)、投资者(Investor)、托管方(Custodian)和监管者(Regulator)
+
+### 2. 资产代币化引擎 (Tokenization Engine)
+- **标准支持**：支持ERC-3643（带有合规功能的代币标准）或ERC-1400
+- **资产挂钩**：实现现实资产价值与链上代币的1:1锚定逻辑及预言机(Oracle)喂价
+
+### 3. 合规规则引擎 (Compliance Rule Engine)
+- **可编程限制**：
+  - 持有者数量上限限制
+  - 单一账户最大持仓限制
+  - 转账白名单强制校验
+
+## 核心交互流程
+
+### 资产上链流程
+1. 资产发行方提交线下证明
+2. 网关审核
+3. 触发合约mint()
+4. 代币发送至合规托管地址
+
+### 交易拦截流程
+1. 用户A发起转账
+2. 合约调用isVerify()
+3. 校验A与B是否均在白名单且未超过限额
+4. 执行/拒绝
+
+## 智能合约
+
+### ComplianceRegistry.sol
+核心合规合约接口，包含以下功能：
+- KYC验证相关函数
+- 黑名单管理
+- 角色管理
+- 资产管理
+- 合规规则检查
+
+详细接口定义请参考 `contracts/ComplianceRegistry.sol` 文件。
+
+## API接口
+
+### 核心API端点
+
+| 方法 | 路径 | 功能描述 |
+|------|------|----------|
+| POST | /v1/compliance/verify | 提交KYC资料并返回链上证明 |
+| GET | /v1/assets/audit-trail | 获取指定资产的完整合规审计追踪 |
+| GET | /v1/health | 健康检查 |
+
+### 请求与响应示例
+
+#### POST /v1/compliance/verify
+
+**请求体**：
+```json
+{
+  "userAddress": "0x1234567890123456789012345678901234567890",
+  "verificationData": "{\"name\": \"John Doe\", \"id\": \"123456789\"}"
+}
+```
+
+**响应**：
+```json
+{
+  "success": true,
+  "verificationId": "KYC-123456",
+  "userId": "0x1234567890123456789012345678901234567890",
+  "message": "KYC verification successful"
+}
+```
+
+#### GET /v1/assets/audit-trail
+
+**查询参数**：
+- assetId: 资产ID
+
+**响应**：
+```json
+{
+  "assetId": "asset-123",
+  "auditTrail": [
+    {
+      "timestamp": "2024-01-01T00:00:00Z",
+      "action": "Asset Created",
+      "actor": "0x1234567890123456789012345678901234567890",
+      "details": "Initial asset creation"
+    },
+    {
+      "timestamp": "2024-01-02T10:00:00Z",
+      "action": "KYC Verified",
+      "actor": "0x0987654321098765432109876543210987654321",
+      "details": "User KYC verification completed"
+    }
+  ]
+}
+```
+
+## 安装与运行
+
+### 后端安装
+
+1. 进入后端目录：
+   ```bash
+   cd backend
+   ```
+
+2. 安装依赖：
+   ```bash
+   go mod download
+   ```
+
+3. 复制环境变量文件并配置：
+   ```bash
+   cp ../.env.example .env
+   # 编辑.env文件，填写相关配置
+   ```
+
+4. 运行后端服务：
+   ```bash
+   go run main.go
+   ```
+
+### 前端安装
+
+1. 进入前端目录：
+   ```bash
+   cd frontend
+   ```
+
+2. 安装依赖：
+   ```bash
+   npm install
+   ```
+
+3. 复制环境变量文件并配置：
+   ```bash
+   cp ../.env.example .env.local
+   # 编辑.env.local文件，填写相关配置
+   ```
+
+4. 运行前端开发服务器：
+   ```bash
+   npm run dev
+   ```
+
+## 配置说明
+
+环境变量配置文件 `.env.example` 包含以下主要配置项：
+
+- **后端服务配置**：端口、环境等
+- **区块链配置**：RPC URL、链ID等
+- **智能合约地址**：合规注册表合约地址
+- **KYC服务配置**：API密钥、端点等
+- **黑名单服务配置**：OFAC API密钥等
+- **身份验证配置**：JWT密钥等
+- **安全配置**：HSM密钥ID、MPC配置等
+- **断路器配置**：启用状态、阈值等
+- **预言机配置**：API密钥、端点等
+
+## 安全性要求
+
+- **密钥管理**：机构私钥需托管于物理HSM或使用MPC(多方计算)签名
+- **多重签名**：涉及资产敏感操作（如冻结、增发）必须经过m/n多签
+- **断路器机制**：当合规服务宕机时，网关应能自动暂停高风险交易
+
+## 开发指南
+
+### 代码规范
+- **Go代码**：遵循Go语言标准规范
+- **前端代码**：遵循Next.js和React最佳实践
+- **智能合约**：遵循Solidity最佳实践和安全规范
+
+### 测试
+- 后端API测试：使用Go测试框架
+- 前端测试：使用Jest和React Testing Library
+- 智能合约测试：使用Hardhat或Truffle
+
+### 部署
+- 后端：容器化部署，支持Kubernetes
+- 前端：静态部署到CDN
+- 智能合约：多链部署，支持Ethereum和Polygon
+
+## 后续计划
+
+1. **功能实现**：
+   - 完成KYC服务集成
+   - 实现资产代币化逻辑
+   - 开发合规规则引擎
+
+2. **安全审计**：
+   - 智能合约安全审计
+   - API安全测试
+   - 渗透测试
+
+3. **性能优化**：
+   - API响应速度优化
+   - 合约Gas费用优化
+   - 前端加载速度优化
+
+4. **扩展功能**：
+   - 支持更多区块链网络
+   - 集成更多KYC服务提供商
+   - 开发移动端应用
+
+5. **生态建设**：
+   - 建立开发者文档
+   - 开发SDK和API客户端
+   - 构建合作伙伴生态
+
+## 贡献指南
+
+欢迎社区贡献！请按照以下步骤：
+
+1. Fork项目
+2. 创建功能分支
+3. 提交更改
+4. 发起Pull Request
+
+## 联系方式
+
+- 项目维护者：[Your Name]
+- 邮箱：[your.email@example.com]
+- 仓库地址：[GitHub Repository URL]
+
+---
+
+**注意**：本文档将随着项目的进展不断更新，敬请关注。
