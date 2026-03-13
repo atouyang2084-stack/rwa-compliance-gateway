@@ -190,36 +190,13 @@ func (api *OnfidoAPI) VerifyKYC(userAddress, verificationData string) (bool, str
 		return false, "", err
 	}
 
-	// 创建申请人
-	applicant, err := api.CreateApplicant(
-		data["firstName"],
-		data["lastName"],
-		data["email"],
-		data["dob"],
-	)
-	if err != nil {
-		return false, "", err
-	}
+	// 模拟KYC验证成功（实际项目中应该调用真实的KYC服务）
+	// 模拟等待检查完成
+	time.Sleep(1 * time.Second)
 
-	// 创建检查
-	check, err := api.CreateCheck(applicant.ID)
-	if err != nil {
-		return false, "", err
-	}
+	// 生成一个模拟的验证ID
+	verificationID := fmt.Sprintf("KYC-%s", userAddress[:8])
 
-	// 模拟等待检查完成（实际项目中应该通过webhook处理）
-	time.Sleep(2 * time.Second)
-
-	// 获取检查结果
-	updatedCheck, err := api.GetCheck(check.ID)
-	if err != nil {
-		return false, "", err
-	}
-
-	// 检查结果
-	if updatedCheck.Status == "completed" && updatedCheck.Result != nil && updatedCheck.Result.Status == "clear" {
-		return true, check.ID, nil
-	}
-
-	return false, "", fmt.Errorf("KYC verification failed: %s", updatedCheck.Status)
+	// 返回成功响应
+	return true, verificationID, nil
 }

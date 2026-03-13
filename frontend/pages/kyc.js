@@ -1,6 +1,6 @@
 import Head from 'next/head'
-import { useState } from 'react'
-import { ConnectButton } from '@rainbow-me/rainbowkit'
+import { useState, useEffect } from 'react'
+import { ethers } from 'ethers'
 
 export default function KYC() {
   const [formData, setFormData] = useState({
@@ -13,6 +13,30 @@ export default function KYC() {
   const [status, setStatus] = useState('')
   const [message, setMessage] = useState('')
   const [loading, setLoading] = useState(false)
+  const [account, setAccount] = useState(null)
+  const [provider, setProvider] = useState(null)
+
+  useEffect(() => {
+    // 检查是否有以太坊钱包
+    if (typeof window.ethereum !== 'undefined') {
+      const provider = new ethers.BrowserProvider(window.ethereum)
+      setProvider(provider)
+    }
+  }, [])
+
+  const connectWallet = async () => {
+    if (!provider) return
+    try {
+      const accounts = await provider.send('eth_requestAccounts', [])
+      setAccount(accounts[0])
+    } catch (error) {
+      console.error('连接钱包失败:', error)
+    }
+  }
+
+  const disconnectWallet = () => {
+    setAccount(null)
+  }
 
   const handleInputChange = (e) => {
     const { name, value } = e.target
@@ -24,17 +48,22 @@ export default function KYC() {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    if (!account) {
+      setMessage('请先连接钱包')
+      setStatus('error')
+      return
+    }
     setLoading(true)
     setMessage('')
 
     try {
-      const response = await fetch('/api/v1/compliance/verify', {
+      const response = await fetch('http://localhost:8081/v1/compliance/verify', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          userAddress: '0x1234567890123456789012345678901234567890', // 实际项目中应该从钱包获取
+          userAddress: account,
           verificationData: JSON.stringify(formData)
         })
       })
@@ -67,7 +96,24 @@ export default function KYC() {
       <main className="container mx-auto px-4 py-8">
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-3xl font-bold text-gray-800">KYC验证</h1>
-          <ConnectButton />
+          {account ? (
+              <div className="flex items-center space-x-2">
+                <span className="text-sm text-gray-600">{account.substring(0, 6)}...{account.substring(38)}</span>
+                <button 
+                  onClick={disconnectWallet}
+                  className="text-blue-600 hover:text-blue-800 font-medium"
+                >
+                  断开连接
+                </button>
+              </div>
+            ) : (
+              <button 
+                onClick={connectWallet}
+                className="bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                连接钱包
+              </button>
+            )}
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">

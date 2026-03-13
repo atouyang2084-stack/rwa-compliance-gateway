@@ -1,4 +1,5 @@
 require("@nomicfoundation/hardhat-toolbox");
+require("dotenv").config();
 
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
@@ -24,7 +25,7 @@ module.exports = {
     },
     // Sepolia测试网
     sepolia: {
-      url: "https://sepolia.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161",
+      url: process.env.SEPOLIA_URL || "https://sepolia.infura.io/v3/YOUR_INFURA_KEY",
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
       chainId: 11155111
     }

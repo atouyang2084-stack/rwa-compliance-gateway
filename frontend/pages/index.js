@@ -1,8 +1,34 @@
 import Head from 'next/head'
 import Link from 'next/link'
-import { ConnectButton } from '@rainbow-me/rainbowkit'
+import { useState, useEffect } from 'react'
+import { ethers } from 'ethers'
 
 export default function Home() {
+  const [account, setAccount] = useState(null)
+  const [provider, setProvider] = useState(null)
+
+  useEffect(() => {
+    // 检查是否有以太坊钱包
+    if (typeof window.ethereum !== 'undefined') {
+      const provider = new ethers.BrowserProvider(window.ethereum)
+      setProvider(provider)
+    }
+  }, [])
+
+  const connectWallet = async () => {
+    if (!provider) return
+    try {
+      const accounts = await provider.send('eth_requestAccounts', [])
+      setAccount(accounts[0])
+    } catch (error) {
+      console.error('连接钱包失败:', error)
+    }
+  }
+
+  const disconnectWallet = () => {
+    setAccount(null)
+  }
+
   return (
     <div className="min-h-screen bg-gray-100">
       <Head>
@@ -17,7 +43,24 @@ export default function Home() {
             <Link href="/kyc" className="text-blue-600 hover:text-blue-800 font-medium">
               KYC验证
             </Link>
-            <ConnectButton />
+            {account ? (
+              <div className="flex items-center space-x-2">
+                <span className="text-sm text-gray-600">{account.substring(0, 6)}...{account.substring(38)}</span>
+                <button 
+                  onClick={disconnectWallet}
+                  className="text-blue-600 hover:text-blue-800 font-medium"
+                >
+                  断开连接
+                </button>
+              </div>
+            ) : (
+              <button 
+                onClick={connectWallet}
+                className="bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                连接钱包
+              </button>
+            )}
           </div>
         </div>
 

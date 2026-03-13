@@ -4,7 +4,12 @@ const { parseEther } = require("ethers");
 
 async function main() {
   // 获取签名者
-  const [deployer] = await ethers.getSigners();
+  const signers = await ethers.getSigners();
+  if (signers.length === 0) {
+    console.error("无法获取签名者，请确保您的RPC端点配置正确并且有可用的账户");
+    process.exit(1);
+  }
+  const deployer = signers[0];
   console.log("部署合约的地址:", deployer.address);
 
   // 部署ComplianceEngine合约
