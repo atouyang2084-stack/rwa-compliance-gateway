@@ -19,8 +19,8 @@ type OnfidoAPI struct {
 // NewOnfidoAPI 创建一个新的OnfidoAPI实例
 func NewOnfidoAPI() *OnfidoAPI {
 	return &OnfidoAPI{
-		apiKey:     os.Getenv("ONFIDO_API_KEY"),
-		apiBaseURL: "https://api.onfido.com/v3.6",
+		apiKey:     os.Getenv("KYC_SERVICE_API_KEY"),
+		apiBaseURL: os.Getenv("KYC_SERVICE_ENDPOINT"),
 		client: &http.Client{
 			Timeout: 30 * time.Second,
 		},

@@ -24,7 +24,7 @@ module.exports = {
     },
     // Sepolia测试网
     sepolia: {
-      url: "https://eth-sepolia.publicnode.com",
+      url: "https://sepolia.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161",
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
       chainId: 11155111
     }
