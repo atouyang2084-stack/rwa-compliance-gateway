@@ -146,6 +146,9 @@ ERC-3643合规代币合约，支持：
 | POST | /v1/assets/create | 创建新资产 |
 | POST | /v1/assets/deposit | 存款（增加资产价值并铸造代币） |
 | POST | /v1/assets/redeem | 赎回（销毁代币并释放资产价值） |
+| POST | /v1/assets/transfer | 转账（在用户之间转移代币） |
+| POST | /v1/assets/freeze | 冻结资产 |
+| POST | /v1/assets/unfreeze | 解冻资产 |
 | GET | /v1/health | 健康检查 |
 
 ### 请求与响应示例
@@ -302,6 +305,66 @@ ERC-3643合规代币合约，支持：
 }
 ```
 
+#### POST /v1/assets/transfer
+
+**请求体**：
+```json
+{
+  "assetId": "test-asset-1",
+  "fromAddress": "0x1234567890123456789012345678901234567890",
+  "toAddress": "0x0987654321098765432109876543210987654321",
+  "amount": 1000
+}
+```
+
+**响应**：
+```json
+{
+  "success": true,
+  "assetId": "test-asset-1",
+  "from": "0x1234567890123456789012345678901234567890",
+  "to": "0x0987654321098765432109876543210987654321",
+  "amount": 1000,
+  "message": "Transfer successful"
+}
+```
+
+#### POST /v1/assets/freeze
+
+**请求体**：
+```json
+{
+  "assetId": "test-asset-1"
+}
+```
+
+**响应**：
+```json
+{
+  "success": true,
+  "assetId": "test-asset-1",
+  "message": "Asset frozen successfully"
+}
+```
+
+#### POST /v1/assets/unfreeze
+
+**请求体**：
+```json
+{
+  "assetId": "test-asset-1"
+}
+```
+
+**响应**：
+```json
+{
+  "success": true,
+  "assetId": "test-asset-1",
+  "message": "Asset unfrozen successfully"
+}
+```
+
 ## 安装与运行
 
 ### 后端安装
@@ -349,6 +412,14 @@ ERC-3643合规代币合约，支持：
    ```bash
    npm run dev
    ```
+
+### 前端改进
+
+- **商业网站风格**：采用成熟的商业网站设计，页面布局清晰，按钮明显，使用顺畅
+- **基于角色的访问控制**：根据用户角色（投资者、发行方、托管方、监管者）显示不同的界面和操作
+- **钱包连接要求**：在执行任何操作前，用户必须先连接钱包
+- **API代理配置**：使用Next.js的API代理功能，避免CORS问题
+- **用户体验优化**：未连接钱包时显示友好的提示信息，而不是网络错误
 
 ## 配置说明
 

@@ -55,3 +55,13 @@ func Close() error {
 	}
 	return nil
 }
+
+// UpdateAssetStatus 更新资产状态
+func UpdateAssetStatus(assetId string, isActive bool) error {
+	_, err := DB.Exec(
+		"UPDATE assets SET is_active = ? WHERE asset_id = ?",
+		isActive,
+		assetId,
+	)
+	return err
+}

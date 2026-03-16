@@ -63,13 +63,43 @@ func RoleMiddleware(requiredRole string) gin.HandlerFunc {
 		// 暂时使用简单的验证
 		if token != "test-token" {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+			return
+		}
+
+		// 从请求头获取角色信息
+		userRole := c.GetHeader("X-User-Role")
+		if userRole == "" {
+			// 默认角色为投资者
+			userRole = "investor"
+		}
+
+		// 角色权限映射
+		rolePermissions := map[string][]string{
+			"investor":   {"investor", "user"},
+			"issuer":     {"issuer", "investor", "user"},
+			"custodian":  {"custodian", "user"},
+			"regulator":  {"regulator", "user"},
+			"admin":      {"admin", "regulator", "custodian", "issuer", "investor", "user"},
+		}
+
+		// 检查用户是否有足够的权限
+		allowedRoles, exists := rolePermissions[userRole]
+		if !exists {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Insufficient permissions"})
 			c.Abort()
 			return
 		}
 
-		// 暂时硬编码角色
-		userRole := "admin"
-		if userRole != requiredRole {
+		// 检查是否包含所需角色
+		hasPermission := false
+		for _, role := range allowedRoles {
+			if role == requiredRole {
+				hasPermission = true
+				break
+			}
+		}
+
+		if !hasPermission {
 			c.JSON(http.StatusForbidden, gin.H{"error": "Insufficient permissions"})
 			c.Abort()
 			return
@@ -93,8 +123,9 @@ func CORSMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
 		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
-		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
-		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With, X-User-Role")
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		c.Writer.Header().Set("Access-Control-Max-Age", "86400")
 
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(204)

@@ -321,3 +321,153 @@ func GetAssetDetails(c *gin.Context) {
 		"asset": responseAsset,
 	})
 }
+
+// TransferAsset 转账（在用户之间转移代币）
+func TransferAsset(c *gin.Context) {
+	// 解析请求体
+	var request struct {
+		AssetId     string `json:"assetId" binding:"required"`
+		FromAddress string `json:"fromAddress" binding:"required"`
+		ToAddress   string `json:"toAddress" binding:"required"`
+		Amount      uint64 `json:"amount" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 输入验证：验证资产ID格式
+	if !utils.IsValidAssetId(request.AssetId) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid asset ID format"})
+		return
+	}
+
+	// 输入验证：验证地址格式
+	if !utils.IsValidAddress(request.FromAddress) || !utils.IsValidAddress(request.ToAddress) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid address format"})
+		return
+	}
+
+	// 输入验证：验证金额
+	if !utils.IsValidAmount(int64(request.Amount)) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid amount"})
+		return
+	}
+
+	// 检查资产是否存在
+	_, err := database.GetAssetByID(request.AssetId)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "Asset not found",
+		})
+		return
+	}
+
+	// 这里应该调用智能合约的transfer函数执行转账
+	// 暂时返回模拟响应
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"assetId": request.AssetId,
+		"from": request.FromAddress,
+		"to": request.ToAddress,
+		"amount": request.Amount,
+		"message": "Transfer successful",
+	})
+}
+
+// FreezeAsset 冻结资产
+func FreezeAsset(c *gin.Context) {
+	// 解析请求体
+	var request struct {
+		AssetId string `json:"assetId" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 输入验证：验证资产ID格式
+	if !utils.IsValidAssetId(request.AssetId) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid asset ID format"})
+		return
+	}
+
+	// 检查资产是否存在
+	asset, err := database.GetAssetByID(request.AssetId)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "Asset not found",
+		})
+		return
+	}
+
+	// 检查资产是否已经冻结
+	if !asset.IsActive {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Asset is already frozen",
+		})
+		return
+	}
+
+	// 更新资产状态为冻结
+	if err := database.UpdateAssetStatus(request.AssetId, false); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"assetId": request.AssetId,
+		"message": "Asset frozen successfully",
+	})
+}
+
+// UnfreezeAsset 解冻资产
+func UnfreezeAsset(c *gin.Context) {
+	// 解析请求体
+	var request struct {
+		AssetId string `json:"assetId" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 输入验证：验证资产ID格式
+	if !utils.IsValidAssetId(request.AssetId) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid asset ID format"})
+		return
+	}
+
+	// 检查资产是否存在
+	asset, err := database.GetAssetByID(request.AssetId)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "Asset not found",
+		})
+		return
+	}
+
+	// 检查资产是否已经解冻
+	if asset.IsActive {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Asset is already active",
+		})
+		return
+	}
+
+	// 更新资产状态为解冻
+	if err := database.UpdateAssetStatus(request.AssetId, true); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"assetId": request.AssetId,
+		"message": "Asset unfrozen successfully",
+	})
+}

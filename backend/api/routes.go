@@ -34,6 +34,9 @@ func RegisterRoutes(r *gin.Engine) {
 				assets.POST("/create", CreateAsset)
 				assets.POST("/deposit", DepositAsset)
 				assets.POST("/redeem", RedeemAsset)
+				assets.POST("/transfer", TransferAsset)
+				assets.POST("/freeze", FreezeAsset)
+				assets.POST("/unfreeze", UnfreezeAsset)
 			}
 		}
 
