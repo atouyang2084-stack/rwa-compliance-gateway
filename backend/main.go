@@ -5,6 +5,7 @@ import (
 	"log"
 	"rwaGateway/config"
 	"rwaGateway/api"
+	"rwaGateway/internal/database"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -28,6 +29,19 @@ func main() {
 		log.Fatalf("Failed to load config: %v", err)
 	}
 	log.Printf("Configuration loaded successfully: Port=%s, Environment=%s", cfg.Port, cfg.Environment)
+
+	// 初始化数据库
+	log.Println("Initializing database...")
+	databaseURL := cfg.DatabaseURL
+	if databaseURL == "" {
+		// 默认使用SQLite数据库文件
+		databaseURL = "./rwa_gateway.db"
+	}
+	log.Printf("Using database URL: %s", databaseURL)
+	if err := database.InitDatabase(databaseURL); err != nil {
+		log.Fatalf("Failed to initialize database: %v", err)
+	}
+	defer database.Close()
 
 	// 设置Gin模式
 	log.Println("Setting Gin mode...")

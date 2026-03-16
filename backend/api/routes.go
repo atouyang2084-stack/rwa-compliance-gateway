@@ -18,6 +18,11 @@ func RegisterRoutes(r *gin.Engine) {
 		assets := v1.Group("/assets")
 		{
 			assets.GET("/audit-trail", GetAssetAuditTrail)
+			assets.GET("/list", GetAssets)
+			assets.GET("/details", GetAssetDetails)
+			assets.POST("/create", CreateAsset)
+			assets.POST("/deposit", DepositAsset)
+			assets.POST("/redeem", RedeemAsset)
 		}
 
 		// 健康检查
