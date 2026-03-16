@@ -23,6 +23,14 @@ contract RWAToken {
     event Approval(address indexed owner, address indexed spender, uint256 value);
     event Mint(address indexed to, uint256 value);
     event Burn(address indexed from, uint256 value);
+    event Paused();
+    event Unpaused();
+
+    // 紧急暂停
+    bool public paused = false;
+    
+    // 重入锁
+    bool private _reentrancyLock = false;
 
     // 构造函数
     constructor(
@@ -36,9 +44,40 @@ contract RWAToken {
         decimals = _decimals;
         complianceRegistry = ComplianceRegistry(_complianceRegistry);
     }
+    
+    // 修饰符
+    modifier whenNotPaused() {
+        require(!paused, "Contract is paused");
+        _;
+    }
+    
+    modifier nonReentrant() {
+        require(!_reentrancyLock, "ReentrancyGuard: reentrant call");
+        _reentrancyLock = true;
+        _;
+        _reentrancyLock = false;
+    }
+    
+    // 暂停合约
+    function pause() external {
+        // 只有合规注册表授权的管理员可以暂停
+        require(complianceRegistry.hasRole(msg.sender, ComplianceRegistry.Role.Regulator), "Not authorized regulator");
+        require(!paused, "Contract is already paused");
+        paused = true;
+        emit Paused();
+    }
+    
+    // 恢复合约
+    function unpause() external {
+        // 只有合规注册表授权的管理员可以恢复
+        require(complianceRegistry.hasRole(msg.sender, ComplianceRegistry.Role.Regulator), "Not authorized regulator");
+        require(paused, "Contract is not paused");
+        paused = false;
+        emit Unpaused();
+    }
 
     // 转账函数
-    function transfer(address to, uint256 value) public returns (bool) {
+    function transfer(address to, uint256 value) public nonReentrant whenNotPaused returns (bool) {
         // 检查转账是否允许
         (bool allowed, string memory reason) = complianceRegistry.isTransferAllowed(msg.sender, to, value);
         require(allowed, reason);
@@ -57,14 +96,30 @@ contract RWAToken {
     }
 
     // 授权函数
-    function approve(address spender, uint256 value) public returns (bool) {
+    function approve(address spender, uint256 value) public whenNotPaused returns (bool) {
         allowance[msg.sender][spender] = value;
         emit Approval(msg.sender, spender, value);
         return true;
     }
+    
+    // 增加授权函数
+    function increaseAllowance(address spender, uint256 addedValue) public whenNotPaused returns (bool) {
+        allowance[msg.sender][spender] += addedValue;
+        emit Approval(msg.sender, spender, allowance[msg.sender][spender]);
+        return true;
+    }
+    
+    // 减少授权函数
+    function decreaseAllowance(address spender, uint256 subtractedValue) public whenNotPaused returns (bool) {
+        uint256 currentAllowance = allowance[msg.sender][spender];
+        require(currentAllowance >= subtractedValue, "Insufficient allowance");
+        allowance[msg.sender][spender] = currentAllowance - subtractedValue;
+        emit Approval(msg.sender, spender, allowance[msg.sender][spender]);
+        return true;
+    }
 
     // 授权转账函数
-    function transferFrom(address from, address to, uint256 value) public returns (bool) {
+    function transferFrom(address from, address to, uint256 value) public nonReentrant whenNotPaused returns (bool) {
         // 检查转账是否允许
         (bool allowed, string memory reason) = complianceRegistry.isTransferAllowed(from, to, value);
         require(allowed, reason);
@@ -85,7 +140,7 @@ contract RWAToken {
     }
 
     // 铸造函数（仅限合规注册表授权的发行方）
-    function mint(address to, uint256 value) public {
+    function mint(address to, uint256 value) public whenNotPaused {
         // 检查调用者是否为发行方
         require(complianceRegistry.hasRole(msg.sender, ComplianceRegistry.Role.Issuer), "Not authorized issuer");
 
@@ -99,9 +154,11 @@ contract RWAToken {
     }
 
     // 销毁函数
-    function burn(uint256 value) public {
+    function burn(uint256 value) public nonReentrant whenNotPaused {
         // 检查余额
         require(balanceOf[msg.sender] >= value, "Insufficient balance");
+        // 检查是否合规
+        require(isCompliant(msg.sender), "Sender is not compliant");
 
         // 执行销毁
         totalSupply -= value;

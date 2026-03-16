@@ -26,6 +26,8 @@ contract AssetManager {
     event Deposit(string indexed assetId, uint256 value, uint256 tokensMinted);
     event Redeem(string indexed assetId, uint256 tokensBurned, uint256 valueReleased);
     event AssetValueUpdated(string indexed assetId, uint256 newValue);
+    event Paused();
+    event Unpaused();
 
     // 权限控制
     address public admin;
@@ -33,6 +35,12 @@ contract AssetManager {
     
     // Oracle管理器
     OracleManager public oracleManager;
+    
+    // 紧急暂停
+    bool public paused = false;
+    
+    // 重入锁
+    bool private _reentrancyLock = false;
 
     // 修饰符
     modifier onlyAdmin() {
@@ -44,11 +52,37 @@ contract AssetManager {
         require(authorizedIssuers[msg.sender], "Not authorized issuer");
         _;
     }
+    
+    modifier whenNotPaused() {
+        require(!paused, "Contract is paused");
+        _;
+    }
+    
+    modifier nonReentrant() {
+        require(!_reentrancyLock, "ReentrancyGuard: reentrant call");
+        _reentrancyLock = true;
+        _;
+        _reentrancyLock = false;
+    }
 
     // 构造函数
     constructor(address _oracleManager) {
         admin = msg.sender;
         oracleManager = OracleManager(_oracleManager);
+    }
+    
+    // 暂停合约
+    function pause() external onlyAdmin {
+        require(!paused, "Contract is already paused");
+        paused = true;
+        emit Paused();
+    }
+    
+    // 恢复合约
+    function unpause() external onlyAdmin {
+        require(paused, "Contract is not paused");
+        paused = false;
+        emit Unpaused();
     }
 
     // 设置Oracle管理器
@@ -67,9 +101,11 @@ contract AssetManager {
     }
 
     // 更新资产价值（用于资产价值变化时）
-    function updateAssetValue(string calldata assetId, uint256 newValue) public onlyAuthorizedIssuer {
+    function updateAssetValue(string calldata assetId, uint256 newValue) public onlyAuthorizedIssuer whenNotPaused {
         // 检查资产是否存在
         require(bytes(assets[assetId].assetId).length > 0, "Asset not found");
+        // 检查资产是否活跃
+        require(assets[assetId].isActive, "Asset is not active");
 
         Asset storage asset = assets[assetId];
         uint256 oldValue = asset.totalValue;
@@ -88,7 +124,9 @@ contract AssetManager {
             // 减少代币
             uint256 tokenToBurn = oldValue - newValue;
             asset.totalTokens -= tokenToBurn;
-            // 这里应该从储备中销毁代币，实际项目中可能需要更复杂的逻辑
+            // 从储备中销毁代币
+            RWAToken token = RWAToken(asset.tokenAddress);
+            token.burn(tokenToBurn);
         }
 
         // 触发事件
@@ -96,7 +134,7 @@ contract AssetManager {
     }
 
     // 通过Oracle自动更新资产价值
-    function updateAssetValueWithOracle(string calldata assetId, uint256 quantity) external onlyAuthorizedIssuer {
+    function updateAssetValueWithOracle(string calldata assetId, uint256 quantity) external onlyAuthorizedIssuer whenNotPaused {
         // 检查资产是否存在
         require(bytes(assets[assetId].assetId).length > 0, "Asset not found");
 
@@ -114,7 +152,7 @@ contract AssetManager {
         string calldata symbol,
         uint256 initialValue,
         address complianceRegistry
-    ) external onlyAuthorizedIssuer returns (address) {
+    ) external onlyAuthorizedIssuer whenNotPaused returns (address) {
         // 检查资产ID是否已存在
         require(bytes(assets[assetId].assetId).length == 0, "Asset already exists");
 
@@ -146,7 +184,7 @@ contract AssetManager {
     }
 
     // 存款（增加资产价值并铸造相应代币）
-    function deposit(string calldata assetId, uint256 value) external onlyAuthorizedIssuer {
+    function deposit(string calldata assetId, uint256 value) external onlyAuthorizedIssuer nonReentrant whenNotPaused {
         // 检查资产是否存在且活跃
         require(bytes(assets[assetId].assetId).length > 0, "Asset not found");
         require(assets[assetId].isActive, "Asset is not active");
@@ -166,7 +204,7 @@ contract AssetManager {
     }
 
     // 赎回（销毁代币并释放相应资产价值）
-    function redeem(string calldata assetId, uint256 tokens) external {
+    function redeem(string calldata assetId, uint256 tokens) external nonReentrant whenNotPaused {
         // 检查资产是否存在且活跃
         require(bytes(assets[assetId].assetId).length > 0, "Asset not found");
         require(assets[assetId].isActive, "Asset is not active");
