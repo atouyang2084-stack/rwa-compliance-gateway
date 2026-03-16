@@ -385,7 +385,7 @@ ERC-3643合规代币合约，支持：
 
 ### 系统集成测试
 
-#### 运行KYC流程测试
+#### 运行系统集成测试
 1. 进入测试目录：
    ```bash
    cd test
@@ -403,13 +403,16 @@ ERC-3643合规代币合约，支持：
 
 4. 运行测试脚本：
    ```bash
-   cd ../test && node kyc_integration_test.js
+   cd ../test && node system_integration_test.js
    ```
 
 #### 测试内容
 - 健康检查API
 - KYC验证流程
+- 资产创建、存款、赎回功能
+- 资产列表和详情查询
 - 资产审计追踪API
+- 前端服务状态
 
 ## 系统要求
 
