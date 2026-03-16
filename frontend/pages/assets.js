@@ -61,7 +61,11 @@ export default function Assets() {
   const fetchAssets = async () => {
     setIsLoading(true)
     try {
-      const response = await fetch('http://localhost:8081/v1/assets/list')
+      const response = await fetch('http://localhost:8081/v1/assets/list', {
+        headers: {
+          'Authorization': 'Bearer test-token'
+        }
+      })
       const data = await response.json()
       if (response.ok) {
         setAssets(data.assets)
@@ -86,7 +90,8 @@ export default function Assets() {
       const response = await fetch('http://localhost:8081/v1/assets/create', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer test-token'
         },
         body: JSON.stringify({
           assetId: createForm.assetId,
@@ -137,7 +142,8 @@ export default function Assets() {
       const response = await fetch('http://localhost:8081/v1/assets/deposit', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer test-token'
         },
         body: JSON.stringify({
           assetId: depositForm.assetId,
@@ -180,7 +186,8 @@ export default function Assets() {
       const response = await fetch('http://localhost:8081/v1/assets/redeem', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer test-token'
         },
         body: JSON.stringify({
           assetId: redeemForm.assetId,
@@ -217,7 +224,11 @@ export default function Assets() {
   const handleAssetClick = async (asset) => {
     setSelectedAsset(asset)
     try {
-      const response = await fetch(`http://localhost:8081/v1/assets/details?assetId=${asset.assetId}`)
+      const response = await fetch(`http://localhost:8081/v1/assets/details?assetId=${asset.assetId}`, {
+        headers: {
+          'Authorization': 'Bearer test-token'
+        }
+      })
       const data = await response.json()
       if (response.ok) {
         setSelectedAsset(data.asset)

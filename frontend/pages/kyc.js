@@ -61,7 +61,8 @@ export default function KYC() {
       const response = await fetch('http://localhost:8081/v1/compliance/verify', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer test-token'
         },
         body: JSON.stringify({
           userAddress: account,
