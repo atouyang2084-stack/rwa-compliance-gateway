@@ -5,6 +5,7 @@ import (
 
 	"rwaGateway/internal/database"
 	"rwaGateway/internal/services"
+	"rwaGateway/utils"
 
 	"github.com/gin-gonic/gin"
 )
@@ -13,12 +14,24 @@ import (
 func VerifyKYC(c *gin.Context) {
 	// 解析请求体
 	var request struct {
-		UserAddress     string `json:"userAddress" binding:"required"`
+		UserAddress      string `json:"userAddress" binding:"required"`
 		VerificationData string `json:"verificationData" binding:"required"`
 	}
 
 	if err := c.ShouldBindJSON(&request); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 输入验证：验证用户地址格式
+	if !utils.IsValidAddress(request.UserAddress) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user address format"})
+		return
+	}
+
+	// 输入验证：验证KYC数据
+	if !utils.IsValidKYCData(request.VerificationData) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid verification data"})
 		return
 	}
 
@@ -84,15 +97,33 @@ func HealthCheck(c *gin.Context) {
 func CreateAsset(c *gin.Context) {
 	// 解析请求体
 	var request struct {
-		AssetId           string `json:"assetId" binding:"required"`
-		Name              string `json:"name" binding:"required"`
-		Symbol            string `json:"symbol" binding:"required"`
-		InitialValue      uint64 `json:"initialValue" binding:"required"`
+		AssetId            string `json:"assetId" binding:"required"`
+		Name               string `json:"name" binding:"required"`
+		Symbol             string `json:"symbol" binding:"required"`
+		InitialValue       uint64 `json:"initialValue" binding:"required"`
 		ComplianceRegistry string `json:"complianceRegistry" binding:"required"`
 	}
 
 	if err := c.ShouldBindJSON(&request); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 输入验证：验证资产ID格式
+	if !utils.IsValidAssetId(request.AssetId) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid asset ID format"})
+		return
+	}
+
+	// 输入验证：验证代币符号格式
+	if !utils.IsValidTokenSymbol(request.Symbol) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid token symbol format"})
+		return
+	}
+
+	// 输入验证：验证金额
+	if !utils.IsValidAmount(int64(request.InitialValue)) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid initial value"})
 		return
 	}
 
@@ -137,6 +168,18 @@ func DepositAsset(c *gin.Context) {
 		return
 	}
 
+	// 输入验证：验证资产ID格式
+	if !utils.IsValidAssetId(request.AssetId) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid asset ID format"})
+		return
+	}
+
+	// 输入验证：验证金额
+	if !utils.IsValidAmount(int64(request.Value)) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid value"})
+		return
+	}
+
 	// 检查资产是否存在
 	_, err := database.GetAssetByID(request.AssetId)
 	if err != nil {
@@ -171,6 +214,18 @@ func RedeemAsset(c *gin.Context) {
 
 	if err := c.ShouldBindJSON(&request); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 输入验证：验证资产ID格式
+	if !utils.IsValidAssetId(request.AssetId) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid asset ID format"})
+		return
+	}
+
+	// 输入验证：验证代币数量
+	if !utils.IsValidAmount(int64(request.Tokens)) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid tokens amount"})
 		return
 	}
 
