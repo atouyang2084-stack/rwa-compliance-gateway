@@ -270,6 +270,29 @@ a:hover {
   font-family: 'Helvetica Neue', Arial, sans-serif;
 }
 
+.form-input {
+  width: 100%;
+  padding: var(--spacing-md) var(--spacing-lg);
+  border: 1px solid var(--gray-medium);
+  border-radius: var(--border-radius);
+  font-size: 1rem;
+  transition: var(--transition);
+  background-color: var(--white-color);
+  font-family: 'Helvetica Neue', Arial, sans-serif;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(0, 51, 102, 0.1);
+  transform: translateY(-1px);
+}
+
+.form-input::placeholder {
+  color: var(--gray-color);
+  font-style: italic;
+}
+
 .form-control:focus {
   outline: none;
   border-color: var(--primary-color);

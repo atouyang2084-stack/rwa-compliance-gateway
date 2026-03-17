@@ -58,11 +58,19 @@ export default function KYC() {
     setMessage('')
 
     try {
+      // 从localStorage获取token
+      const token = localStorage.getItem('token')
+      if (!token) {
+        setMessage('请先登录')
+        setStatus('error')
+        return
+      }
+
       const response = await fetch('http://localhost:8081/v1/compliance/verify', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer test-token'
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
           userAddress: account,

@@ -5,6 +5,8 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+
+	"rwaGateway/internal/services"
 )
 
 // AuthMiddleware 身份验证中间件
@@ -27,13 +29,22 @@ func AuthMiddleware() gin.HandlerFunc {
 		}
 
 		token := parts[1]
-		// 这里应该验证token的有效性
-		// 暂时使用简单的验证
-		if token != "test-token" {
+		
+		// 验证token有效性
+		authService := services.NewAuthService()
+		claims, err := authService.ValidateToken(token)
+		if err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
 			c.Abort()
 			return
 		}
+
+		// 将用户信息存储到上下文
+		c.Set("userID", claims["id"])
+		c.Set("username", claims["username"])
+		c.Set("email", claims["email"])
+		c.Set("address", claims["address"])
+		c.Set("role", claims["role"])
 
 		c.Next()
 	}
@@ -59,18 +70,14 @@ func RoleMiddleware(requiredRole string) gin.HandlerFunc {
 		}
 
 		token := parts[1]
-		// 这里应该从token中提取角色信息
-		// 暂时使用简单的验证
-		if token != "test-token" {
+		
+		// 验证token并获取角色
+		authService := services.NewAuthService()
+		userRole, err := authService.GetUserRoleFromToken(token)
+		if err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+			c.Abort()
 			return
-		}
-
-		// 从请求头获取角色信息
-		userRole := c.GetHeader("X-User-Role")
-		if userRole == "" {
-			// 默认角色为投资者
-			userRole = "investor"
 		}
 
 		// 角色权限映射

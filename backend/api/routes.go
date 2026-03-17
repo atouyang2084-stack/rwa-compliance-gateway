@@ -15,6 +15,13 @@ func RegisterRoutes(r *gin.Engine) {
 		// 健康检查
 		v1.GET("/health", HealthCheck)
 
+		// 用户认证路由（不需要身份验证）
+		auth := v1.Group("/auth")
+		{
+			auth.POST("/register", RegisterUser)
+			auth.POST("/login", LoginUser)
+		}
+
 		// 需要身份验证的路由
 		authGroup := v1.Group("/")
 		authGroup.Use(AuthMiddleware())

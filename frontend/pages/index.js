@@ -6,12 +6,19 @@ import { ethers } from 'ethers'
 export default function Home() {
   const [account, setAccount] = useState(null)
   const [provider, setProvider] = useState(null)
+  const [user, setUser] = useState(null)
 
   useEffect(() => {
     // 检查是否有以太坊钱包
     if (typeof window.ethereum !== 'undefined') {
       const provider = new ethers.BrowserProvider(window.ethereum)
       setProvider(provider)
+    }
+
+    // 检查是否已登录
+    const storedUser = localStorage.getItem('user')
+    if (storedUser) {
+      setUser(JSON.parse(storedUser))
     }
   }, [])
 
@@ -43,25 +50,28 @@ export default function Home() {
               <Link href="/" className="nav-link active">首页</Link>
               <Link href="/kyc" className="nav-link">KYC验证</Link>
               <Link href="/assets" className="nav-link">资产管理</Link>
-              {account ? (
+              {user ? (
                 <>
                   <div className="bg-gray-light px-3 py-1 rounded-full text-sm font-medium text-gray-color border border-gray-medium">
-                    {account.substring(0, 6)}...{account.substring(38)}
+                    {user.username} ({user.role})
                   </div>
                   <button 
-                    onClick={disconnectWallet}
+                    onClick={() => {
+                      localStorage.removeItem('token')
+                      localStorage.removeItem('user')
+                      setUser(null)
+                      window.location.href = '/'
+                    }}
                     className="btn btn-outline"
                   >
-                    断开连接
+                    退出登录
                   </button>
                 </>
               ) : (
-                <button 
-                  onClick={connectWallet}
-                  className="btn btn-primary"
-                >
-                  连接钱包
-                </button>
+                <>
+                  <Link href="/login" className="btn btn-outline">登录</Link>
+                  <Link href="/register" className="btn btn-primary">注册</Link>
+                </>
               )}
             </div>
           </div>

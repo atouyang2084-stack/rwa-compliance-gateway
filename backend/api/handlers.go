@@ -626,3 +626,80 @@ func GetAddressJurisdiction(c *gin.Context) {
 		"jurisdiction": "US", // 模拟数据
 	})
 }
+
+// RegisterUser 用户注册
+func RegisterUser(c *gin.Context) {
+	var request struct {
+		Username string `json:"username" binding:"required"`
+		Email    string `json:"email" binding:"required,email"`
+		Password string `json:"password" binding:"required,min=6"`
+		Address  string `json:"address" binding:"required"`
+		Role     string `json:"role"`
+	}
+
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 输入验证：验证地址格式
+	if !utils.IsValidAddress(request.Address) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid address format"})
+		return
+	}
+
+	// 设置默认角色
+	if request.Role == "" {
+		request.Role = "investor"
+	}
+
+	// 注册用户
+	authService := services.NewAuthService()
+	err := authService.RegisterUser(request.Username, request.Email, request.Password, request.Address, request.Role)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "User registered successfully",
+		"username": request.Username,
+		"email": request.Email,
+		"role": request.Role,
+	})
+}
+
+// LoginUser 用户登录
+func LoginUser(c *gin.Context) {
+	var request struct {
+		Username string `json:"username" binding:"required"`
+		Password string `json:"password" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 登录用户
+	authService := services.NewAuthService()
+	token, user, err := authService.LoginUser(request.Username, request.Password)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "Login successful",
+		"token": token,
+		"user": gin.H{
+			"id": user.ID,
+			"username": user.Username,
+			"email": user.Email,
+			"address": user.Address,
+			"role": user.Role,
+		},
+	})
+}

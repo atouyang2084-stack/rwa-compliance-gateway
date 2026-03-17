@@ -48,24 +48,50 @@ export default function Assets() {
 
   useEffect(() => {
     // 检查是否有以太坊钱包
-    if (typeof window.ethereum !== 'undefined') {
+    if (typeof window !== 'undefined' && typeof window.ethereum !== 'undefined') {
       const provider = new ethers.BrowserProvider(window.ethereum)
       setProvider(provider)
     }
     
-    // 只有在连接钱包后才获取资产列表
-    // fetchAssets()
+    // 检查是否已登录
+    if (typeof window !== 'undefined') {
+      const storedUser = localStorage.getItem('user')
+      if (storedUser) {
+        // 如果已登录，尝试自动连接钱包
+        if (typeof window.ethereum !== 'undefined') {
+          const provider = new ethers.BrowserProvider(window.ethereum)
+          setProvider(provider)
+          // 尝试连接钱包
+          connectWallet()
+        }
+      }
+    }
   }, [])
 
   const connectWallet = async () => {
-    if (!provider) return
+    let ethProvider = provider
+    if (!ethProvider && typeof window !== 'undefined' && typeof window.ethereum !== 'undefined') {
+      ethProvider = new ethers.BrowserProvider(window.ethereum)
+      setProvider(ethProvider)
+    }
+    if (!ethProvider) {
+      setMessage('未检测到以太坊钱包，请安装MetaMask等钱包插件')
+      setStatus('error')
+      return
+    }
     try {
-      const accounts = await provider.send('eth_requestAccounts', [])
-      setAccount(accounts[0])
+      const accounts = await ethProvider.send('eth_requestAccounts', [])
+      const accountAddress = accounts[0]
+      setAccount(accountAddress)
       // 连接钱包成功后获取资产列表
-      fetchAssets()
+      // 等待状态更新后再调用fetchAssets
+      setTimeout(() => {
+        fetchAssets()
+      }, 100)
     } catch (error) {
       console.error('连接钱包失败:', error)
+      setMessage('连接钱包失败，请检查钱包是否已解锁')
+      setStatus('error')
     }
   }
 
@@ -82,6 +108,22 @@ export default function Assets() {
       return
     }
     
+    // 检查是否已登录
+    if (typeof window === 'undefined') {
+      setMessage('请先登录')
+      setStatus('error')
+      setIsLoading(false)
+      return
+    }
+    
+    const token = localStorage.getItem('token')
+    if (!token) {
+      setMessage('请先登录')
+      setStatus('error')
+      setIsLoading(false)
+      return
+    }
+    
     setIsLoading(true)
     setMessage('')
     setStatus('')
@@ -90,7 +132,7 @@ export default function Assets() {
       // 使用相对路径，通过Next.js代理
       const response = await fetch('/api/assets/list', {
         headers: {
-          'Authorization': 'Bearer test-token',
+          'Authorization': `Bearer ${token}`,
           'X-User-Role': userRole
         }
       })
@@ -120,6 +162,20 @@ export default function Assets() {
       return
     }
     
+    // 检查是否已登录
+    if (typeof window === 'undefined') {
+      setMessage('请先登录')
+      setStatus('error')
+      return
+    }
+    
+    const token = localStorage.getItem('token')
+    if (!token) {
+      setMessage('请先登录')
+      setStatus('error')
+      return
+    }
+    
     setIsLoading(true)
     setMessage('')
 
@@ -128,7 +184,7 @@ export default function Assets() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer test-token',
+          'Authorization': `Bearer ${token}`,
           'X-User-Role': userRole
         },
         body: JSON.stringify({
@@ -181,6 +237,20 @@ export default function Assets() {
       return
     }
     
+    // 检查是否已登录
+    if (typeof window === 'undefined') {
+      setMessage('请先登录')
+      setStatus('error')
+      return
+    }
+    
+    const token = localStorage.getItem('token')
+    if (!token) {
+      setMessage('请先登录')
+      setStatus('error')
+      return
+    }
+    
     setIsLoading(true)
     setMessage('')
 
@@ -189,7 +259,7 @@ export default function Assets() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer test-token',
+          'Authorization': `Bearer ${token}`,
           'X-User-Role': userRole
         },
         body: JSON.stringify({
@@ -234,6 +304,20 @@ export default function Assets() {
       return
     }
     
+    // 检查是否已登录
+    if (typeof window === 'undefined') {
+      setMessage('请先登录')
+      setStatus('error')
+      return
+    }
+    
+    const token = localStorage.getItem('token')
+    if (!token) {
+      setMessage('请先登录')
+      setStatus('error')
+      return
+    }
+    
     setIsLoading(true)
     setMessage('')
 
@@ -242,7 +326,7 @@ export default function Assets() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer test-token',
+          'Authorization': `Bearer ${token}`,
           'X-User-Role': userRole
         },
         body: JSON.stringify({
@@ -287,6 +371,20 @@ export default function Assets() {
       return
     }
     
+    // 检查是否已登录
+    if (typeof window === 'undefined') {
+      setMessage('请先登录')
+      setStatus('error')
+      return
+    }
+    
+    const token = localStorage.getItem('token')
+    if (!token) {
+      setMessage('请先登录')
+      setStatus('error')
+      return
+    }
+    
     setIsLoading(true)
     setMessage('')
 
@@ -295,7 +393,7 @@ export default function Assets() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer test-token',
+          'Authorization': `Bearer ${token}`,
           'X-User-Role': userRole
         },
         body: JSON.stringify({
@@ -341,6 +439,20 @@ export default function Assets() {
       return
     }
     
+    // 检查是否已登录
+    if (typeof window === 'undefined') {
+      setMessage('请先登录')
+      setStatus('error')
+      return
+    }
+    
+    const token = localStorage.getItem('token')
+    if (!token) {
+      setMessage('请先登录')
+      setStatus('error')
+      return
+    }
+    
     setIsLoading(true)
     setMessage('')
 
@@ -349,7 +461,7 @@ export default function Assets() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer test-token',
+          'Authorization': `Bearer ${token}`,
           'X-User-Role': userRole
         },
         body: JSON.stringify({
@@ -392,6 +504,20 @@ export default function Assets() {
       return
     }
     
+    // 检查是否已登录
+    if (typeof window === 'undefined') {
+      setMessage('请先登录')
+      setStatus('error')
+      return
+    }
+    
+    const token = localStorage.getItem('token')
+    if (!token) {
+      setMessage('请先登录')
+      setStatus('error')
+      return
+    }
+    
     setIsLoading(true)
     setMessage('')
 
@@ -400,7 +526,7 @@ export default function Assets() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer test-token',
+          'Authorization': `Bearer ${token}`,
           'X-User-Role': userRole
         },
         body: JSON.stringify({
@@ -435,10 +561,25 @@ export default function Assets() {
 
   const handleAssetClick = async (asset) => {
     setSelectedAsset(asset)
+    
+    // 检查是否已登录
+    if (typeof window === 'undefined') {
+      setMessage('请先登录')
+      setStatus('error')
+      return
+    }
+    
+    const token = localStorage.getItem('token')
+    if (!token) {
+      setMessage('请先登录')
+      setStatus('error')
+      return
+    }
+    
     try {
       const response = await fetch(`/api/assets/details?assetId=${asset.assetId}`, {
         headers: {
-          'Authorization': 'Bearer test-token',
+          'Authorization': `Bearer ${token}`,
           'X-User-Role': userRole
         }
       })
@@ -495,25 +636,42 @@ export default function Assets() {
               <Link href="/" className="nav-link">首页</Link>
               <Link href="/kyc" className="nav-link">KYC验证</Link>
               <Link href="/assets" className="nav-link active">资产管理</Link>
-              {account ? (
-                <>
-                  <div className="bg-gray-light px-3 py-1 rounded-full text-sm font-medium text-gray-color border border-gray-medium">
-                    {account.substring(0, 6)}...{account.substring(38)}
-                  </div>
-                  <button 
-                    onClick={disconnectWallet}
-                    className="btn btn-outline"
-                  >
-                    断开连接
-                  </button>
-                </>
+              {typeof window !== 'undefined' ? (
+                localStorage.getItem('user') ? (
+                  <>
+                    <div className="bg-gray-light px-3 py-1 rounded-full text-sm font-medium text-gray-color border border-gray-medium">
+                      {JSON.parse(localStorage.getItem('user')).username} ({JSON.parse(localStorage.getItem('user')).role})
+                    </div>
+                    {/* 始终显示连接钱包按钮，即使之前连接失败 */}
+                    <button 
+                      onClick={connectWallet}
+                      className="btn btn-primary"
+                    >
+                      {account ? '重新连接钱包' : '连接钱包'}
+                    </button>
+                    <button 
+                      onClick={() => {
+                        localStorage.removeItem('token')
+                        localStorage.removeItem('user')
+                        setAccount(null)
+                        window.location.href = '/'
+                      }}
+                      className="btn btn-outline"
+                    >
+                      退出登录
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <Link href="/login" className="btn btn-outline">登录</Link>
+                    <Link href="/register" className="btn btn-primary">注册</Link>
+                  </>
+                )
               ) : (
-                <button 
-                  onClick={connectWallet}
-                  className="btn btn-primary"
-                >
-                  连接钱包
-                </button>
+                <>
+                  <Link href="/login" className="btn btn-outline">登录</Link>
+                  <Link href="/register" className="btn btn-primary">注册</Link>
+                </>
               )}
             </div>
           </div>
