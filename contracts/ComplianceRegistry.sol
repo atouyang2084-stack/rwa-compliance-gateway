@@ -29,6 +29,9 @@ enum ComplianceStandard {
     event RoleAssigned(address indexed user, Role role);
     event AssetRegistered(string indexed assetId, address indexed contractAddress, ComplianceStandard standard);
     event AssetStatusChanged(string indexed assetId, AssetStatus status);
+    event JurisdictionAdded(string indexed jurisdiction);
+    event JurisdictionRestricted(string indexed jurisdiction, bool restricted);
+    event AddressJurisdictionUpdated(address indexed user, string indexed jurisdiction);
 
     // KYC验证相关
     function verifyKYC(address user, string calldata verificationData) external returns (bool);
@@ -44,6 +47,13 @@ enum ComplianceStandard {
     function assignRole(address user, Role role) external;
     function revokeRole(address user, Role role) external;
     function hasRole(address user, Role role) external view returns (bool);
+
+    // 司法管辖区管理
+    function addJurisdiction(string calldata jurisdiction) external;
+    function restrictJurisdiction(string calldata jurisdiction, bool restricted) external;
+    function isJurisdictionRestricted(string calldata jurisdiction) external view returns (bool);
+    function setAddressJurisdiction(address user, string calldata jurisdiction) external;
+    function getAddressJurisdiction(address user) external view returns (string memory);
 
     // 资产管理
     function registerAsset(string calldata assetId, address contractAddress, ComplianceStandard standard, uint256 totalValuation) external;

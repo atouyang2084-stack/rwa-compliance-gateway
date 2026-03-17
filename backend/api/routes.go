@@ -23,6 +23,14 @@ func RegisterRoutes(r *gin.Engine) {
 			compliance := authGroup.Group("/compliance")
 			{
 				compliance.POST("/verify", VerifyKYC)
+				// 制裁名单管理
+				compliance.GET("/sanction-list", GetSanctionList)
+				compliance.POST("/sync-sanction-list", SyncSanctionList)
+				// 司法管辖区管理
+				compliance.POST("/jurisdiction", AddJurisdiction)
+				compliance.PUT("/jurisdiction/restrict", RestrictJurisdiction)
+				compliance.POST("/address-jurisdiction", SetAddressJurisdiction)
+				compliance.GET("/address-jurisdiction", GetAddressJurisdiction)
 			}
 
 			// 资产相关路由

@@ -140,6 +140,12 @@ ERC-3643合规代币合约，支持：
 | 方法 | 路径 | 功能描述 |
 |------|------|----------|
 | POST | /v1/compliance/verify | 提交KYC资料并返回链上证明 |
+| GET | /v1/compliance/sanction-list | 获取制裁名单 |
+| POST | /v1/compliance/sync-sanction-list | 同步制裁名单 |
+| POST | /v1/compliance/jurisdiction | 添加司法管辖区 |
+| PUT | /v1/compliance/jurisdiction/restrict | 限制司法管辖区 |
+| POST | /v1/compliance/address-jurisdiction | 设置地址司法管辖区 |
+| GET | /v1/compliance/address-jurisdiction | 获取地址司法管辖区 |
 | GET | /v1/assets/audit-trail | 获取指定资产的完整合规审计追踪 |
 | GET | /v1/assets/list | 获取所有资产列表 |
 | GET | /v1/assets/details | 获取指定资产详情 |
@@ -362,6 +368,107 @@ ERC-3643合规代币合约，支持：
   "success": true,
   "assetId": "test-asset-1",
   "message": "Asset unfrozen successfully"
+}
+```
+
+#### GET /v1/compliance/sanction-list
+
+**响应**：
+```json
+{
+  "success": true,
+  "sanctionedAddresses": [
+    "0x1234567890123456789012345678901234567890",
+    "0x0987654321098765432109876543210987654321",
+    "0xabcdef1234567890abcdef1234567890abcdef12"
+  ]
+}
+```
+
+#### POST /v1/compliance/sync-sanction-list
+
+**响应**：
+```json
+{
+  "success": true,
+  "message": "Sanction list synced successfully",
+  "sanctionedAddresses": [
+    "0x1234567890123456789012345678901234567890",
+    "0x0987654321098765432109876543210987654321",
+    "0xabcdef1234567890abcdef1234567890abcdef12"
+  ]
+}
+```
+
+#### POST /v1/compliance/jurisdiction
+
+**请求体**：
+```json
+{
+  "jurisdiction": "UK"
+}
+```
+
+**响应**：
+```json
+{
+  "success": true,
+  "message": "Jurisdiction added successfully",
+  "jurisdiction": "UK"
+}
+```
+
+#### PUT /v1/compliance/jurisdiction/restrict
+
+**请求体**：
+```json
+{
+  "jurisdiction": "CN",
+  "restricted": true
+}
+```
+
+**响应**：
+```json
+{
+  "success": true,
+  "message": "Jurisdiction restriction updated successfully",
+  "jurisdiction": "CN",
+  "restricted": true
+}
+```
+
+#### POST /v1/compliance/address-jurisdiction
+
+**请求体**：
+```json
+{
+  "address": "0x1111111111111111111111111111111111111111",
+  "jurisdiction": "US"
+}
+```
+
+**响应**：
+```json
+{
+  "success": true,
+  "message": "Address jurisdiction set successfully",
+  "address": "0x1111111111111111111111111111111111111111",
+  "jurisdiction": "US"
+}
+```
+
+#### GET /v1/compliance/address-jurisdiction
+
+**查询参数**：
+- address: 钱包地址
+
+**响应**：
+```json
+{
+  "success": true,
+  "address": "0x1111111111111111111111111111111111111111",
+  "jurisdiction": "US"
 }
 ```
 

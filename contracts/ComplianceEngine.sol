@@ -15,6 +15,11 @@ contract ComplianceEngine is ComplianceRegistry {
     // 角色映射
     mapping(address => mapping(Role => bool)) public roles;
 
+    // 司法管辖区映射
+    mapping(string => bool) public jurisdictions; // 司法管辖区是否存在
+    mapping(string => bool) public restrictedJurisdictions; // 司法管辖区是否被限制
+    mapping(address => string) public addressJurisdictions; // 地址对应的司法管辖区
+
     // 资产映射
     mapping(string => Asset) public assets;
     string[] public assetIds;
@@ -49,6 +54,11 @@ contract ComplianceEngine is ComplianceRegistry {
     // 构造函数
     constructor() {
         admin = msg.sender;
+        // 初始化默认司法管辖区
+        addJurisdiction("US");
+        addJurisdiction("CN");
+        addJurisdiction("EU");
+        addJurisdiction("JP");
     }
 
     // KYC验证相关
@@ -96,6 +106,34 @@ contract ComplianceEngine is ComplianceRegistry {
 
     function hasRole(address user, Role role) external view returns (bool) {
         return roles[user][role];
+    }
+
+    // 司法管辖区管理
+    function addJurisdiction(string calldata jurisdiction) public onlyAdmin {
+        require(!jurisdictions[jurisdiction], "Jurisdiction already exists");
+        jurisdictions[jurisdiction] = true;
+        restrictedJurisdictions[jurisdiction] = false;
+        emit JurisdictionAdded(jurisdiction);
+    }
+
+    function restrictJurisdiction(string calldata jurisdiction, bool restricted) external onlyAdmin {
+        require(jurisdictions[jurisdiction], "Jurisdiction not found");
+        restrictedJurisdictions[jurisdiction] = restricted;
+        emit JurisdictionRestricted(jurisdiction, restricted);
+    }
+
+    function isJurisdictionRestricted(string calldata jurisdiction) external view returns (bool) {
+        return restrictedJurisdictions[jurisdiction];
+    }
+
+    function setAddressJurisdiction(address user, string calldata jurisdiction) external onlyAdmin {
+        require(jurisdictions[jurisdiction], "Jurisdiction not found");
+        addressJurisdictions[user] = jurisdiction;
+        emit AddressJurisdictionUpdated(user, jurisdiction);
+    }
+
+    function getAddressJurisdiction(address user) external view returns (string memory) {
+        return addressJurisdictions[user];
     }
 
     // 资产管理
@@ -203,6 +241,24 @@ contract ComplianceEngine is ComplianceRegistry {
         }
         if (!kycVerified[to]) {
             return (false, "Recipient KYC not verified");
+        }
+
+        // 检查司法管辖区合规性
+        string memory fromJurisdiction = addressJurisdictions[from];
+        string memory toJurisdiction = addressJurisdictions[to];
+        
+        if (bytes(fromJurisdiction).length == 0) {
+            return (false, "Sender jurisdiction not set");
+        }
+        if (bytes(toJurisdiction).length == 0) {
+            return (false, "Recipient jurisdiction not set");
+        }
+        
+        if (restrictedJurisdictions[fromJurisdiction]) {
+            return (false, "Sender jurisdiction is restricted");
+        }
+        if (restrictedJurisdictions[toJurisdiction]) {
+            return (false, "Recipient jurisdiction is restricted");
         }
 
         // 这里应该根据具体的代币合约地址获取资产信息

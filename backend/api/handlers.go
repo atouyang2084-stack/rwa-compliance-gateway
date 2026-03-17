@@ -364,6 +364,31 @@ func TransferAsset(c *gin.Context) {
 		return
 	}
 
+	// 检查地址是否在制裁名单中
+	sanctionsService := services.NewSanctionsService()
+	
+	// 检查发送方地址
+	isSanctioned, err := sanctionsService.IsAddressSanctioned(request.FromAddress)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to check sanction status"})
+		return
+	}
+	if isSanctioned {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Sender address is sanctioned"})
+		return
+	}
+
+	// 检查接收方地址
+	isSanctioned, err = sanctionsService.IsAddressSanctioned(request.ToAddress)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to check sanction status"})
+		return
+	}
+	if isSanctioned {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Recipient address is sanctioned"})
+		return
+	}
+
 	// 这里应该调用智能合约的transfer函数执行转账
 	// 暂时返回模拟响应
 	c.JSON(http.StatusOK, gin.H{
@@ -469,5 +494,135 @@ func UnfreezeAsset(c *gin.Context) {
 		"success": true,
 		"assetId": request.AssetId,
 		"message": "Asset unfrozen successfully",
+	})
+}
+
+// SyncSanctionList 同步制裁名单
+func SyncSanctionList(c *gin.Context) {
+	sanctionsService := services.NewSanctionsService()
+	
+	// 同步制裁名单
+	if err := sanctionsService.SyncSanctionList(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to sync sanction list",
+		})
+		return
+	}
+
+	// 获取当前制裁地址列表
+	sanctionedAddresses := sanctionsService.GetSanctionedAddresses()
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "Sanction list synced successfully",
+		"sanctionedAddresses": sanctionedAddresses,
+	})
+}
+
+// GetSanctionList 获取制裁名单
+func GetSanctionList(c *gin.Context) {
+	sanctionsService := services.NewSanctionsService()
+	
+	// 获取当前制裁地址列表
+	sanctionedAddresses := sanctionsService.GetSanctionedAddresses()
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"sanctionedAddresses": sanctionedAddresses,
+	})
+}
+
+// Jurisdiction管理
+
+// AddJurisdiction 添加司法管辖区
+func AddJurisdiction(c *gin.Context) {
+	var request struct {
+		Jurisdiction string `json:"jurisdiction" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 这里应该调用智能合约添加司法管辖区
+	// 暂时返回模拟响应
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "Jurisdiction added successfully",
+		"jurisdiction": request.Jurisdiction,
+	})
+}
+
+// RestrictJurisdiction 限制司法管辖区
+func RestrictJurisdiction(c *gin.Context) {
+	var request struct {
+		Jurisdiction string `json:"jurisdiction" binding:"required"`
+		Restricted   bool   `json:"restricted" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 这里应该调用智能合约限制司法管辖区
+	// 暂时返回模拟响应
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "Jurisdiction restriction updated successfully",
+		"jurisdiction": request.Jurisdiction,
+		"restricted": request.Restricted,
+	})
+}
+
+// SetAddressJurisdiction 设置地址司法管辖区
+func SetAddressJurisdiction(c *gin.Context) {
+	var request struct {
+		Address      string `json:"address" binding:"required"`
+		Jurisdiction string `json:"jurisdiction" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 输入验证：验证地址格式
+	if !utils.IsValidAddress(request.Address) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid address format"})
+		return
+	}
+
+	// 这里应该调用智能合约设置地址司法管辖区
+	// 暂时返回模拟响应
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "Address jurisdiction set successfully",
+		"address": request.Address,
+		"jurisdiction": request.Jurisdiction,
+	})
+}
+
+// GetAddressJurisdiction 获取地址司法管辖区
+func GetAddressJurisdiction(c *gin.Context) {
+	address := c.Query("address")
+	if address == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "address is required"})
+		return
+	}
+
+	// 输入验证：验证地址格式
+	if !utils.IsValidAddress(address) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid address format"})
+		return
+	}
+
+	// 这里应该调用智能合约获取地址司法管辖区
+	// 暂时返回模拟响应
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"address": address,
+		"jurisdiction": "US", // 模拟数据
 	})
 }
