@@ -43,3 +43,7 @@ coverage/
 # 日志文件
 logs/
 *.log
+
+# 数据库文件
+*.db
+backend/rwa_gateway.db
