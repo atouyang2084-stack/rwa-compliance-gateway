@@ -1,6 +1,7 @@
 package api
 
 import (
+	"log"
 	"net/http"
 
 	"rwaGateway/internal/database"
@@ -64,24 +65,29 @@ func GetAssetAuditTrail(c *gin.Context) {
 		return
 	}
 
-	// 这里应该从数据库或区块链获取资产审计追踪
-	// 暂时返回模拟响应
+	// 从数据库获取资产审计日志
+	logs, err := database.GetAssetAuditLogs(assetId)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 转换为响应格式
+	var auditTrail []map[string]interface{}
+	for _, log := range logs {
+		auditTrail = append(auditTrail, map[string]interface{}{
+			"timestamp":     log.CreatedAt,
+			"action":        log.Action,
+			"actor":         log.UserAddress,
+			"amount":        log.Amount,
+			"targetAddress": log.TargetAddress,
+			"details":       log.Details,
+		})
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"assetId": assetId,
-		"auditTrail": []map[string]interface{}{
-			{
-				"timestamp": "2024-01-01T00:00:00Z",
-				"action": "Asset Created",
-				"actor": "0x1234567890123456789012345678901234567890",
-				"details": "Initial asset creation",
-			},
-			{
-				"timestamp": "2024-01-02T10:00:00Z",
-				"action": "KYC Verified",
-				"actor": "0x0987654321098765432109876543210987654321",
-				"details": "User KYC verification completed",
-			},
-		},
+		"assetId":    assetId,
+		"auditTrail": auditTrail,
 	})
 }
 
@@ -128,12 +134,14 @@ func CreateAsset(c *gin.Context) {
 	}
 
 	// 创建新资产
+	// 代币数量设为固定值1000000，这样代币价格会随资产价值变化而变化
+	const fixedTotalTokens = uint64(1000000)
 	asset := database.Asset{
 		AssetID:      request.AssetId,
 		Name:         request.Name,
 		Symbol:       request.Symbol,
 		TotalValue:   request.InitialValue,
-		TotalTokens:  request.InitialValue,
+		TotalTokens:  fixedTotalTokens,
 		TokenAddress: "0x8221201A5c1c62bDfB0431beAD8843931f2A72aE", // 模拟地址
 		IsActive:     true,
 	}
@@ -155,12 +163,13 @@ func CreateAsset(c *gin.Context) {
 	})
 }
 
-// DepositAsset 存款（增加资产价值并铸造代币）
+// DepositAsset 存款（增加资产价值并分配代币）
 func DepositAsset(c *gin.Context) {
 	// 解析请求体
 	var request struct {
-		AssetId string `json:"assetId" binding:"required"`
-		Value   uint64 `json:"value" binding:"required"`
+		AssetId     string `json:"assetId" binding:"required"`
+		Value       uint64 `json:"value" binding:"required"`
+		UserAddress string `json:"userAddress" binding:"required"`
 	}
 
 	if err := c.ShouldBindJSON(&request); err != nil {
@@ -180,8 +189,14 @@ func DepositAsset(c *gin.Context) {
 		return
 	}
 
+	// 输入验证：验证用户地址格式
+	if !utils.IsValidAddress(request.UserAddress) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user address format"})
+		return
+	}
+
 	// 检查资产是否存在
-	_, err := database.GetAssetByID(request.AssetId)
+	asset, err := database.GetAssetByID(request.AssetId)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{
 			"error": "Asset not found",
@@ -189,18 +204,78 @@ func DepositAsset(c *gin.Context) {
 		return
 	}
 
-	// 更新资产价值和代币数量
+	// 计算应该分配的代币数量
+	// 代币数量 = 存入金额 * 代币总量 / 原资产价值
+	// 这样可以保持代币价格与资产价值成正比
+	var tokensToAdd int
+	if asset.TotalValue == 0 {
+		// 首次存款，设置固定的代币总量
+		const fixedTotalTokens = uint64(1000000) // 固定100万代币
+		// 首次存款需要初始化代币总量
+		if err := database.UpdateAssetTokens(request.AssetId, fixedTotalTokens, true); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		// 首次存款，代币数量等于固定总量
+		tokensToAdd = int(fixedTotalTokens)
+	} else {
+		// 使用浮点数计算以保持精度
+		tokensToAdd = int(float64(request.Value) * float64(asset.TotalTokens) / float64(asset.TotalValue))
+		// 确保至少分配1个代币
+		if tokensToAdd < 1 {
+			tokensToAdd = 1
+		}
+		
+		// 获取所有用户的资产余额
+		allBalances, err := database.GetAllUserAssetBalances(request.AssetId)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		
+		// 计算需要从每个用户减少的代币数量
+		// 按比例减少现有用户的余额
+		for _, balance := range allBalances {
+			if balance.UserAddress != request.UserAddress {
+				// 计算需要减少的代币数量
+				tokensToReduce := int(float64(balance.Balance) * float64(tokensToAdd) / float64(asset.TotalTokens))
+				if tokensToReduce > 0 {
+					// 更新用户资产余额（减少）
+					if err := database.UpdateUserAssetBalance(balance.UserAddress, request.AssetId, -tokensToReduce); err != nil {
+						c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+						return
+					}
+				}
+			}
+		}
+	}
+
+	// 更新资产价值
 	if err := database.UpdateAssetValue(request.AssetId, request.Value, true); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
+	// 更新用户资产余额
+	if err := database.UpdateUserAssetBalance(request.UserAddress, request.AssetId, tokensToAdd); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 创建审计日志
+	if err := database.CreateAuditLog("deposit", request.UserAddress, request.AssetId, int(request.Value), "", "Deposit successful"); err != nil {
+		// 审计日志创建失败不影响主操作
+		log.Println("Failed to create audit log:", err)
+	}
+
 	// 返回成功响应
 	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"assetId": request.AssetId,
-		"value": request.Value,
-		"message": "Deposit successful",
+		"success":     true,
+		"assetId":     request.AssetId,
+		"value":       request.Value,
+		"tokens":      tokensToAdd,
+		"userAddress": request.UserAddress,
+		"message":     "Deposit successful",
 	})
 }
 
@@ -208,8 +283,9 @@ func DepositAsset(c *gin.Context) {
 func RedeemAsset(c *gin.Context) {
 	// 解析请求体
 	var request struct {
-		AssetId string `json:"assetId" binding:"required"`
-		Tokens  uint64 `json:"tokens" binding:"required"`
+		AssetId     string `json:"assetId" binding:"required"`
+		Tokens      uint64 `json:"tokens" binding:"required"`
+		UserAddress string `json:"userAddress" binding:"required"`
 	}
 
 	if err := c.ShouldBindJSON(&request); err != nil {
@@ -229,6 +305,12 @@ func RedeemAsset(c *gin.Context) {
 		return
 	}
 
+	// 输入验证：验证用户地址格式
+	if !utils.IsValidAddress(request.UserAddress) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user address format"})
+		return
+	}
+
 	// 检查资产是否存在
 	asset, err := database.GetAssetByID(request.AssetId)
 	if err != nil {
@@ -238,26 +320,55 @@ func RedeemAsset(c *gin.Context) {
 		return
 	}
 
-	// 检查代币数量是否足够
-	if asset.TotalTokens < request.Tokens {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Insufficient tokens",
-		})
-		return
-	}
-
-	// 更新资产价值和代币数量
-	if err := database.UpdateAssetValue(request.AssetId, request.Tokens, false); err != nil {
+	// 检查用户余额是否足够
+	userBalance, err := database.GetUserAssetBalance(request.UserAddress, request.AssetId)
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
+	if userBalance < int(request.Tokens) {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Insufficient tokens in user balance",
+		})
+		return
+	}
+
+	// 计算赎回的价值
+	// 赎回价值 = 代币数量 * 资产总价值 / 代币总量
+	valueToRedeem := uint64(float64(request.Tokens) * float64(asset.TotalValue) / float64(asset.TotalTokens))
+
+	// 确保至少赎回1美分
+	if valueToRedeem < 1 {
+		valueToRedeem = 1
+	}
+
+	// 更新资产价值
+	if err := database.UpdateAssetValue(request.AssetId, valueToRedeem, false); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 更新用户资产余额（减少）
+	if err := database.UpdateUserAssetBalance(request.UserAddress, request.AssetId, -int(request.Tokens)); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 创建审计日志
+	if err := database.CreateAuditLog("redeem", request.UserAddress, request.AssetId, int(valueToRedeem), "", "Redeem successful"); err != nil {
+		// 审计日志创建失败不影响主操作
+		log.Println("Failed to create audit log:", err)
+	}
+
 	// 返回成功响应
 	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"assetId": request.AssetId,
-		"tokens": request.Tokens,
-		"message": "Redeem successful",
+		"success":     true,
+		"assetId":     request.AssetId,
+		"tokens":      request.Tokens,
+		"value":       valueToRedeem,
+		"userAddress": request.UserAddress,
+		"message":     "Redeem successful",
 	})
 }
 
@@ -389,8 +500,39 @@ func TransferAsset(c *gin.Context) {
 		return
 	}
 
-	// 这里应该调用智能合约的transfer函数执行转账
-	// 暂时返回模拟响应
+	// 检查发送方余额是否足够
+	senderBalance, err := database.GetUserAssetBalance(request.FromAddress, request.AssetId)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	if senderBalance < int(request.Amount) {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Insufficient tokens in sender balance",
+		})
+		return
+	}
+
+	// 执行转账：从发送方扣除代币
+	if err := database.UpdateUserAssetBalance(request.FromAddress, request.AssetId, -int(request.Amount)); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 执行转账：给接收方增加代币
+	if err := database.UpdateUserAssetBalance(request.ToAddress, request.AssetId, int(request.Amount)); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 创建审计日志
+	if err := database.CreateAuditLog("transfer", request.FromAddress, request.AssetId, int(request.Amount), request.ToAddress, "Transfer successful"); err != nil {
+		// 审计日志创建失败不影响主操作
+		log.Println("Failed to create audit log:", err)
+	}
+
+	// 返回成功响应
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"assetId": request.AssetId,
@@ -494,6 +636,54 @@ func UnfreezeAsset(c *gin.Context) {
 		"success": true,
 		"assetId": request.AssetId,
 		"message": "Asset unfrozen successfully",
+	})
+}
+
+// 下架资产
+func DeactivateAsset(c *gin.Context) {
+	// 解析请求体
+	var request struct {
+		AssetId string `json:"assetId" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 输入验证：验证资产ID格式
+	if !utils.IsValidAssetId(request.AssetId) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid asset ID format"})
+		return
+	}
+
+	// 检查资产是否存在
+	asset, err := database.GetAssetByID(request.AssetId)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "Asset not found",
+		})
+		return
+	}
+
+	// 检查资产是否已经下架
+	if !asset.IsActive {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Asset is already inactive",
+		})
+		return
+	}
+
+	// 下架资产（设置为非活跃状态）
+	if err := database.UpdateAssetStatus(request.AssetId, false); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"assetId": request.AssetId,
+		"message": "Asset deactivated successfully",
 	})
 }
 
@@ -624,6 +814,43 @@ func GetAddressJurisdiction(c *gin.Context) {
 		"success": true,
 		"address": address,
 		"jurisdiction": "US", // 模拟数据
+	})
+}
+
+// GetUserBalances 获取用户的所有资产余额
+func GetUserBalances(c *gin.Context) {
+	userAddress := c.Query("userAddress")
+	if userAddress == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "userAddress is required"})
+		return
+	}
+
+	// 输入验证：验证地址格式
+	if !utils.IsValidAddress(userAddress) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user address format"})
+		return
+	}
+
+	// 获取用户资产余额
+	balances, err := database.GetUserBalances(userAddress)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 转换为响应格式
+	var responseBalances []map[string]interface{}
+	for _, balance := range balances {
+		responseBalances = append(responseBalances, map[string]interface{}{
+			"assetId":   balance.AssetID,
+			"balance":   balance.Balance,
+			"updatedAt": balance.UpdatedAt,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":  true,
+		"balances": responseBalances,
 	})
 }
 

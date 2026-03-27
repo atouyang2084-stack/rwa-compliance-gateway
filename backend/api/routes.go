@@ -44,14 +44,16 @@ func RegisterRoutes(r *gin.Engine) {
 			assets := authGroup.Group("/assets")
 			{
 				assets.GET("/audit-trail", GetAssetAuditTrail)
-				assets.GET("/list", GetAssets)
-				assets.GET("/details", GetAssetDetails)
-				assets.POST("/create", CreateAsset)
+			assets.GET("/list", GetAssets)
+			assets.GET("/details", GetAssetDetails)
+			assets.GET("/balances", GetUserBalances)
+			assets.POST("/create", CreateAsset)
 				assets.POST("/deposit", DepositAsset)
 				assets.POST("/redeem", RedeemAsset)
 				assets.POST("/transfer", TransferAsset)
 				assets.POST("/freeze", FreezeAsset)
 				assets.POST("/unfreeze", UnfreezeAsset)
+				assets.POST("/deactivate", DeactivateAsset)
 			}
 		}
 

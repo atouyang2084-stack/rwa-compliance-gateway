@@ -62,6 +62,41 @@ func createTables() error {
 		is_active BOOLEAN NOT NULL DEFAULT 1
 	)
 	`)
+	if err != nil {
+		return err
+	}
+
+	// 创建用户资产余额表
+	_, err = DB.Exec(`
+	CREATE TABLE IF NOT EXISTS user_asset_balances (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		user_address TEXT NOT NULL,
+		asset_id TEXT NOT NULL,
+		balance INTEGER NOT NULL DEFAULT 0,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		UNIQUE(user_address, asset_id),
+		FOREIGN KEY (user_address) REFERENCES users(address),
+		FOREIGN KEY (asset_id) REFERENCES assets(asset_id)
+	)
+	`)
+	if err != nil {
+		return err
+	}
+
+	// 创建审计记录表
+	_, err = DB.Exec(`
+	CREATE TABLE IF NOT EXISTS audit_logs (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		action TEXT NOT NULL,
+		user_address TEXT NOT NULL,
+		asset_id TEXT,
+		amount INTEGER,
+		target_address TEXT,
+		details TEXT,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	)
+	`)
 	return err
 }
 
@@ -150,4 +185,148 @@ func UpdateUserRole(username, role string) error {
 		role, username,
 	)
 	return err
+}
+
+// UserAssetBalance 用户资产余额结构体
+type UserAssetBalance struct {
+	ID          int    `json:"id"`
+	UserAddress string `json:"user_address"`
+	AssetID     string `json:"asset_id"`
+	Balance     int    `json:"balance"`
+	CreatedAt   string `json:"created_at"`
+	UpdatedAt   string `json:"updated_at"`
+}
+
+// GetUserAssetBalance 获取用户的资产余额
+func GetUserAssetBalance(userAddress, assetId string) (int, error) {
+	var balance int
+	err := DB.QueryRow(
+		"SELECT balance FROM user_asset_balances WHERE user_address = ? AND asset_id = ?",
+		userAddress, assetId,
+	).Scan(&balance)
+	if err == sql.ErrNoRows {
+		return 0, nil
+	}
+	return balance, err
+}
+
+// UpdateUserAssetBalance 更新用户的资产余额
+func UpdateUserAssetBalance(userAddress, assetId string, amount int) error {
+	// 尝试更新余额
+	result, err := DB.Exec(
+		"UPDATE user_asset_balances SET balance = balance + ?, updated_at = CURRENT_TIMESTAMP WHERE user_address = ? AND asset_id = ?",
+		amount, userAddress, assetId,
+	)
+	if err != nil {
+		return err
+	}
+
+	// 检查是否有记录被更新
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	// 如果没有记录被更新，创建新记录
+	if rowsAffected == 0 {
+		_, err = DB.Exec(
+			"INSERT INTO user_asset_balances (user_address, asset_id, balance) VALUES (?, ?, ?)",
+			userAddress, assetId, amount,
+		)
+	}
+
+	return err
+}
+
+// GetUserBalances 获取用户的所有资产余额
+func GetUserBalances(userAddress string) ([]UserAssetBalance, error) {
+	rows, err := DB.Query(
+		"SELECT id, user_address, asset_id, balance, created_at, updated_at FROM user_asset_balances WHERE user_address = ?",
+		userAddress,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var balances []UserAssetBalance
+	for rows.Next() {
+		var balance UserAssetBalance
+		err := rows.Scan(&balance.ID, &balance.UserAddress, &balance.AssetID, &balance.Balance, &balance.CreatedAt, &balance.UpdatedAt)
+		if err != nil {
+			return nil, err
+		}
+		balances = append(balances, balance)
+	}
+
+	return balances, nil
+}
+
+// GetAllUserAssetBalances 获取所有用户的特定资产余额
+func GetAllUserAssetBalances(assetId string) ([]UserAssetBalance, error) {
+	rows, err := DB.Query(
+		"SELECT id, user_address, asset_id, balance, created_at, updated_at FROM user_asset_balances WHERE asset_id = ?",
+		assetId,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var balances []UserAssetBalance
+	for rows.Next() {
+		var balance UserAssetBalance
+		err := rows.Scan(&balance.ID, &balance.UserAddress, &balance.AssetID, &balance.Balance, &balance.CreatedAt, &balance.UpdatedAt)
+		if err != nil {
+			return nil, err
+		}
+		balances = append(balances, balance)
+	}
+
+	return balances, nil
+}
+
+// AuditLog 审计日志结构体
+type AuditLog struct {
+	ID            int    `json:"id"`
+	Action        string `json:"action"`
+	UserAddress   string `json:"user_address"`
+	AssetID       string `json:"asset_id"`
+	Amount        int    `json:"amount"`
+	TargetAddress string `json:"target_address"`
+	Details       string `json:"details"`
+	CreatedAt     string `json:"created_at"`
+}
+
+// CreateAuditLog 创建审计日志
+func CreateAuditLog(action, userAddress, assetId string, amount int, targetAddress, details string) error {
+	_, err := DB.Exec(
+		"INSERT INTO audit_logs (action, user_address, asset_id, amount, target_address, details) VALUES (?, ?, ?, ?, ?, ?)",
+		action, userAddress, assetId, amount, targetAddress, details,
+	)
+	return err
+}
+
+// GetAssetAuditLogs 获取资产的审计日志
+func GetAssetAuditLogs(assetId string) ([]AuditLog, error) {
+	rows, err := DB.Query(
+		"SELECT id, action, user_address, asset_id, amount, target_address, details, created_at FROM audit_logs WHERE asset_id = ? ORDER BY created_at DESC",
+		assetId,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var logs []AuditLog
+	for rows.Next() {
+		var log AuditLog
+		err := rows.Scan(&log.ID, &log.Action, &log.UserAddress, &log.AssetID, &log.Amount, &log.TargetAddress, &log.Details, &log.CreatedAt)
+		if err != nil {
+			return nil, err
+		}
+		logs = append(logs, log)
+	}
+
+	return logs, nil
 }

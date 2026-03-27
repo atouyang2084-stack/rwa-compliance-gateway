@@ -57,18 +57,35 @@ func GetAssetByID(assetID string) (Asset, error) {
 	return asset, err
 }
 
-// UpdateAssetValue 更新资产价值和代币数量
+// UpdateAssetValue 更新资产价值
 func UpdateAssetValue(assetID string, value uint64, isDeposit bool) error {
 	var err error
 	if isDeposit {
 		_, err = DB.Exec(
-			"UPDATE assets SET total_value = total_value + ?, total_tokens = total_tokens + ? WHERE asset_id = ?",
-			value, value, assetID,
+			"UPDATE assets SET total_value = total_value + ? WHERE asset_id = ?",
+			value, assetID,
 		)
 	} else {
 		_, err = DB.Exec(
-			"UPDATE assets SET total_value = total_value - ?, total_tokens = total_tokens - ? WHERE asset_id = ?",
-			value, value, assetID,
+			"UPDATE assets SET total_value = total_value - ? WHERE asset_id = ?",
+			value, assetID,
+		)
+	}
+	return err
+}
+
+// UpdateAssetTokens 更新资产代币总量
+func UpdateAssetTokens(assetID string, tokens uint64, isDeposit bool) error {
+	var err error
+	if isDeposit {
+		_, err = DB.Exec(
+			"UPDATE assets SET total_tokens = total_tokens + ? WHERE asset_id = ?",
+			tokens, assetID,
+		)
+	} else {
+		_, err = DB.Exec(
+			"UPDATE assets SET total_tokens = total_tokens - ? WHERE asset_id = ?",
+			tokens, assetID,
 		)
 	}
 	return err

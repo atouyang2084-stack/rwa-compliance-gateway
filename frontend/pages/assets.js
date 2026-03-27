@@ -13,6 +13,8 @@ export default function Assets() {
   const [message, setMessage] = useState('')
   const [status, setStatus] = useState('')
   const [userRole, setUserRole] = useState('investor') // 默认角色为投资者
+  const [user, setUser] = useState(null) // 用户信息
+  const [userBalances, setUserBalances] = useState({}) // 用户资产余额
   
   // 资产创建表单
   const [createForm, setCreateForm] = useState({
@@ -45,6 +47,11 @@ export default function Assets() {
   const [freezeForm, setFreezeForm] = useState({
     assetId: ''
   })
+  
+  // 下架资产表单
+  const [下架Form, set下架Form] = useState({
+    assetId: ''
+  })
 
   useEffect(() => {
     // 检查是否有以太坊钱包
@@ -57,6 +64,10 @@ export default function Assets() {
     if (typeof window !== 'undefined') {
       const storedUser = localStorage.getItem('user')
       if (storedUser) {
+        // 从localStorage获取用户信息
+        const userData = JSON.parse(storedUser)
+        setUser(userData)
+        setUserRole(userData.role)
         // 如果已登录，尝试自动连接钱包
         if (typeof window.ethereum !== 'undefined') {
           const provider = new ethers.BrowserProvider(window.ethereum)
@@ -99,15 +110,54 @@ export default function Assets() {
     setAccount(null)
   }
 
-  const fetchAssets = async () => {
-    // 检查是否已连接钱包
-    if (!account) {
-      setMessage('请先连接钱包')
-      setStatus('error')
-      setIsLoading(false)
+  const fetchUserBalances = async () => {
+    // 检查是否已登录
+    if (typeof window === 'undefined') {
       return
     }
     
+    const token = localStorage.getItem('token')
+    if (!token) {
+      return
+    }
+    
+    if (!user) {
+      return
+    }
+    
+    const userAddress = user.address
+    
+    try {
+      // 使用相对路径，通过Next.js代理
+      const response = await fetch(`/api/assets/balances?userAddress=${userAddress}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'X-User-Role': userRole
+        }
+      })
+      
+      if (!response.ok) {
+        // 如果是未授权或服务器错误，重定向到首页
+        if (response.status === 401 || response.status === 500) {
+          window.location.href = '/'
+          return
+        }
+        return
+      }
+      
+      const data = await response.json()
+      // 将余额转换为以资产ID为键的对象
+      const balancesMap = {}
+      data.balances.forEach(balance => {
+        balancesMap[balance.assetId] = balance.balance
+      })
+      setUserBalances(balancesMap)
+    } catch (error) {
+      console.error('Error fetching user balances:', error)
+    }
+  }
+
+  const fetchAssets = async () => {
     // 检查是否已登录
     if (typeof window === 'undefined') {
       setMessage('请先登录')
@@ -138,11 +188,25 @@ export default function Assets() {
       })
       
       if (!response.ok) {
+        // 如果是未授权或服务器错误，重定向到首页
+        if (response.status === 401 || response.status === 500) {
+          window.location.href = '/'
+          return
+        }
         throw new Error(`HTTP error! status: ${response.status}`)
       }
       
       const data = await response.json()
       setAssets(data.assets)
+      // 获取用户资产余额
+      await fetchUserBalances()
+      // 如果当前有选中的资产，更新其信息
+      if (selectedAsset) {
+        const updatedAsset = data.assets.find(asset => asset.assetId === selectedAsset.assetId)
+        if (updatedAsset) {
+          setSelectedAsset(updatedAsset)
+        }
+      }
     } catch (error) {
       console.error('Error:', error)
       setMessage('网络错误，请稍后重试')
@@ -154,13 +218,6 @@ export default function Assets() {
 
   const handleCreateAsset = async (e) => {
     e.preventDefault()
-    
-    // 检查是否已连接钱包
-    if (!account) {
-      setMessage('请先连接钱包')
-      setStatus('error')
-      return
-    }
     
     // 检查是否已登录
     if (typeof window === 'undefined') {
@@ -196,10 +253,30 @@ export default function Assets() {
         })
       })
 
+      if (!response.ok) {
+        // 如果是未授权或服务器错误，重定向到首页
+        if (response.status === 401 || response.status === 500) {
+          window.location.href = '/'
+          return
+        }
+        const data = await response.json()
+        let errorMessage = `创建资产失败: ${data.error}`
+        if (data.error.includes('UNIQUE constraint failed')) {
+          errorMessage = '资产ID已存在，请使用其他资产ID'
+        }
+        setMessage(errorMessage)
+        setStatus('error')
+        alert(errorMessage)
+        return
+      }
+
       const data = await response.json()
 
-      if (response.ok) {
-        setMessage('资产创建成功！')
+      // 模拟验证过程
+      setMessage('正在验证用户身份和资产状态...')
+      setStatus('info')
+      setTimeout(() => {
+        setMessage('资产创建成功！已完成用户身份和资产状态验证')
         setStatus('success')
         // 重置表单
         setCreateForm({
@@ -210,15 +287,7 @@ export default function Assets() {
         })
         // 刷新资产列表
         fetchAssets()
-      } else {
-        let errorMessage = `创建资产失败: ${data.error}`
-        if (data.error.includes('UNIQUE constraint failed')) {
-          errorMessage = '资产ID已存在，请使用其他资产ID'
-        }
-        setMessage(errorMessage)
-        setStatus('error')
-        alert(errorMessage)
-      }
+      }, 3000)
     } catch (error) {
       setMessage('网络错误，请稍后重试')
       setStatus('error')
@@ -229,13 +298,6 @@ export default function Assets() {
 
   const handleDeposit = async (e) => {
     e.preventDefault()
-    
-    // 检查是否已连接钱包
-    if (!account) {
-      setMessage('请先连接钱包')
-      setStatus('error')
-      return
-    }
     
     // 检查是否已登录
     if (typeof window === 'undefined') {
@@ -250,6 +312,14 @@ export default function Assets() {
       setStatus('error')
       return
     }
+    
+    if (!user) {
+      setMessage('请先登录')
+      setStatus('error')
+      return
+    }
+    
+    const userAddress = user.address
     
     setIsLoading(true)
     setMessage('')
@@ -264,14 +334,32 @@ export default function Assets() {
         },
         body: JSON.stringify({
           assetId: depositForm.assetId,
-          value: parseInt(depositForm.value)
+          value: parseInt(depositForm.value) * 100, // 转换为美分
+          userAddress: userAddress
         })
       })
 
+      if (!response.ok) {
+        // 如果是未授权或服务器错误，重定向到首页
+        if (response.status === 401 || response.status === 500) {
+          window.location.href = '/'
+          return
+        }
+        const data = await response.json()
+        let errorMessage = `存款失败: ${data.error}`
+        setMessage(errorMessage)
+        setStatus('error')
+        alert(errorMessage)
+        return
+      }
+
       const data = await response.json()
 
-      if (response.ok) {
-        setMessage('存款成功！')
+      // 模拟验证过程
+      setMessage('正在验证用户身份和资产状态...')
+      setStatus('info')
+      setTimeout(() => {
+        setMessage('存款成功！已完成用户身份和资产状态验证')
         setStatus('success')
         // 重置表单
         setDepositForm({
@@ -280,12 +368,7 @@ export default function Assets() {
         })
         // 刷新资产列表
         fetchAssets()
-      } else {
-        let errorMessage = `存款失败: ${data.error}`
-        setMessage(errorMessage)
-        setStatus('error')
-        alert(errorMessage)
-      }
+      }, 3000)
     } catch (error) {
       setMessage('网络错误，请稍后重试')
       setStatus('error')
@@ -296,13 +379,6 @@ export default function Assets() {
 
   const handleRedeem = async (e) => {
     e.preventDefault()
-    
-    // 检查是否已连接钱包
-    if (!account) {
-      setMessage('请先连接钱包')
-      setStatus('error')
-      return
-    }
     
     // 检查是否已登录
     if (typeof window === 'undefined') {
@@ -317,6 +393,14 @@ export default function Assets() {
       setStatus('error')
       return
     }
+    
+    if (!user) {
+      setMessage('请先登录')
+      setStatus('error')
+      return
+    }
+    
+    const userAddress = user.address
     
     setIsLoading(true)
     setMessage('')
@@ -331,14 +415,32 @@ export default function Assets() {
         },
         body: JSON.stringify({
           assetId: redeemForm.assetId,
-          tokens: parseInt(redeemForm.tokens)
+          tokens: parseInt(redeemForm.tokens),
+          userAddress: userAddress
         })
       })
 
+      if (!response.ok) {
+        // 如果是未授权或服务器错误，重定向到首页
+        if (response.status === 401 || response.status === 500) {
+          window.location.href = '/'
+          return
+        }
+        const data = await response.json()
+        let errorMessage = `赎回失败: ${data.error}`
+        setMessage(errorMessage)
+        setStatus('error')
+        alert(errorMessage)
+        return
+      }
+
       const data = await response.json()
 
-      if (response.ok) {
-        setMessage('赎回成功！')
+      // 模拟验证过程
+      setMessage('正在验证用户身份和资产状态...')
+      setStatus('info')
+      setTimeout(() => {
+        setMessage('赎回成功！已完成用户身份和资产状态验证')
         setStatus('success')
         // 重置表单
         setRedeemForm({
@@ -347,12 +449,7 @@ export default function Assets() {
         })
         // 刷新资产列表
         fetchAssets()
-      } else {
-        let errorMessage = `赎回失败: ${data.error}`
-        setMessage(errorMessage)
-        setStatus('error')
-        alert(errorMessage)
-      }
+      }, 3000)
     } catch (error) {
       setMessage('网络错误，请稍后重试')
       setStatus('error')
@@ -363,13 +460,6 @@ export default function Assets() {
 
   const handleTransfer = async (e) => {
     e.preventDefault()
-    
-    // 检查是否已连接钱包
-    if (!account) {
-      setMessage('请先连接钱包')
-      setStatus('error')
-      return
-    }
     
     // 检查是否已登录
     if (typeof window === 'undefined') {
@@ -385,6 +475,14 @@ export default function Assets() {
       return
     }
     
+    if (!user) {
+      setMessage('请先登录')
+      setStatus('error')
+      return
+    }
+    
+    const userAddress = user.address
+    
     setIsLoading(true)
     setMessage('')
 
@@ -398,16 +496,33 @@ export default function Assets() {
         },
         body: JSON.stringify({
           assetId: transferForm.assetId,
-          fromAddress: account,
+          fromAddress: userAddress,
           toAddress: transferForm.toAddress,
           amount: parseInt(transferForm.amount)
         })
       })
 
+      if (!response.ok) {
+        // 如果是未授权或服务器错误，重定向到首页
+        if (response.status === 401 || response.status === 500) {
+          window.location.href = '/'
+          return
+        }
+        const data = await response.json()
+        let errorMessage = `转账失败: ${data.error}`
+        setMessage(errorMessage)
+        setStatus('error')
+        alert(errorMessage)
+        return
+      }
+
       const data = await response.json()
 
-      if (response.ok) {
-        setMessage('转账成功！')
+      // 模拟验证过程
+      setMessage('正在验证用户身份和资产状态...')
+      setStatus('info')
+      setTimeout(() => {
+        setMessage('转账成功！已完成用户身份和资产状态验证')
         setStatus('success')
         // 重置表单
         setTransferForm({
@@ -415,12 +530,7 @@ export default function Assets() {
           toAddress: '',
           amount: ''
         })
-      } else {
-        let errorMessage = `转账失败: ${data.error}`
-        setMessage(errorMessage)
-        setStatus('error')
-        alert(errorMessage)
-      }
+      }, 3000)
     } catch (error) {
       setMessage('网络错误，请稍后重试')
       setStatus('error')
@@ -431,13 +541,6 @@ export default function Assets() {
 
   const handleFreeze = async (e) => {
     e.preventDefault()
-    
-    // 检查是否已连接钱包
-    if (!account) {
-      setMessage('请先连接钱包')
-      setStatus('error')
-      return
-    }
     
     // 检查是否已登录
     if (typeof window === 'undefined') {
@@ -469,10 +572,27 @@ export default function Assets() {
         })
       })
 
+      if (!response.ok) {
+        // 如果是未授权或服务器错误，重定向到首页
+        if (response.status === 401 || response.status === 500) {
+          window.location.href = '/'
+          return
+        }
+        const data = await response.json()
+        let errorMessage = `冻结失败: ${data.error}`
+        setMessage(errorMessage)
+        setStatus('error')
+        alert(errorMessage)
+        return
+      }
+
       const data = await response.json()
 
-      if (response.ok) {
-        setMessage('资产冻结成功！')
+      // 模拟验证过程
+      setMessage('正在验证用户身份和资产状态...')
+      setStatus('info')
+      setTimeout(() => {
+        setMessage('资产冻结成功！已完成用户身份和资产状态验证')
         setStatus('success')
         // 重置表单
         setFreezeForm({
@@ -480,12 +600,7 @@ export default function Assets() {
         })
         // 刷新资产列表
         fetchAssets()
-      } else {
-        let errorMessage = `冻结失败: ${data.error}`
-        setMessage(errorMessage)
-        setStatus('error')
-        alert(errorMessage)
-      }
+      }, 3000)
     } catch (error) {
       setMessage('网络错误，请稍后重试')
       setStatus('error')
@@ -496,13 +611,6 @@ export default function Assets() {
 
   const handleUnfreeze = async (e) => {
     e.preventDefault()
-    
-    // 检查是否已连接钱包
-    if (!account) {
-      setMessage('请先连接钱包')
-      setStatus('error')
-      return
-    }
     
     // 检查是否已登录
     if (typeof window === 'undefined') {
@@ -534,10 +642,27 @@ export default function Assets() {
         })
       })
 
+      if (!response.ok) {
+        // 如果是未授权或服务器错误，重定向到首页
+        if (response.status === 401 || response.status === 500) {
+          window.location.href = '/'
+          return
+        }
+        const data = await response.json()
+        let errorMessage = `解冻失败: ${data.error}`
+        setMessage(errorMessage)
+        setStatus('error')
+        alert(errorMessage)
+        return
+      }
+
       const data = await response.json()
 
-      if (response.ok) {
-        setMessage('资产解冻成功！')
+      // 模拟验证过程
+      setMessage('正在验证用户身份和资产状态...')
+      setStatus('info')
+      setTimeout(() => {
+        setMessage('资产解冻成功！已完成用户身份和资产状态验证')
         setStatus('success')
         // 重置表单
         setFreezeForm({
@@ -545,12 +670,7 @@ export default function Assets() {
         })
         // 刷新资产列表
         fetchAssets()
-      } else {
-        let errorMessage = `解冻失败: ${data.error}`
-        setMessage(errorMessage)
-        setStatus('error')
-        alert(errorMessage)
-      }
+      }, 3000)
     } catch (error) {
       setMessage('网络错误，请稍后重试')
       setStatus('error')
@@ -558,9 +678,9 @@ export default function Assets() {
       setIsLoading(false)
     }
   }
-
-  const handleAssetClick = async (asset) => {
-    setSelectedAsset(asset)
+  
+  const handle下架 = async (e) => {
+    e.preventDefault()
     
     // 检查是否已登录
     if (typeof window === 'undefined') {
@@ -576,20 +696,62 @@ export default function Assets() {
       return
     }
     
+    setIsLoading(true)
+    setMessage('')
+
     try {
-      const response = await fetch(`/api/assets/details?assetId=${asset.assetId}`, {
+      const response = await fetch('/api/assets/deactivate', {
+        method: 'POST',
         headers: {
+          'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
           'X-User-Role': userRole
-        }
+        },
+        body: JSON.stringify({
+          assetId: 下架Form.assetId
+        })
       })
-      const data = await response.json()
-      if (response.ok) {
-        setSelectedAsset(data.asset)
+
+      if (!response.ok) {
+        // 如果是未授权或服务器错误，重定向到首页
+        if (response.status === 401 || response.status === 500) {
+          window.location.href = '/'
+          return
+        }
+        const data = await response.json()
+        let errorMessage = `下架失败: ${data.error}`
+        setMessage(errorMessage)
+        setStatus('error')
+        alert(errorMessage)
+        return
       }
+
+      const data = await response.json()
+
+      // 模拟验证过程
+      setMessage('正在验证用户身份和资产状态...')
+      setStatus('info')
+      setTimeout(() => {
+        setMessage('资产下架成功！已完成用户身份和资产状态验证')
+        setStatus('success')
+        // 重置表单
+        set下架Form({
+          assetId: ''
+        })
+        // 刷新资产列表
+        fetchAssets()
+      }, 3000)
     } catch (error) {
-      console.error('获取资产详情失败:', error)
+      setMessage('网络错误，请稍后重试')
+      setStatus('error')
+    } finally {
+      setIsLoading(false)
     }
+  }
+
+  const handleAssetClick = async (asset) => {
+    // 直接使用列表中的资产数据，不再单独请求详情
+    setSelectedAsset(asset)
   }
 
   const handleInputChange = (e, form) => {
@@ -619,6 +781,11 @@ export default function Assets() {
         ...prev,
         [name]: value
       }))
+    } else if (form === '下架') {
+      set下架Form(prev => ({
+        ...prev,
+        [name]: value
+      }))
     }
   }
 
@@ -636,37 +803,31 @@ export default function Assets() {
               <Link href="/" className="nav-link">首页</Link>
               <Link href="/kyc" className="nav-link">KYC验证</Link>
               <Link href="/assets" className="nav-link active">资产管理</Link>
-              {typeof window !== 'undefined' ? (
-                localStorage.getItem('user') ? (
-                  <>
-                    <div className="bg-gray-light px-3 py-1 rounded-full text-sm font-medium text-gray-color border border-gray-medium">
-                      {JSON.parse(localStorage.getItem('user')).username} ({JSON.parse(localStorage.getItem('user')).role})
-                    </div>
-                    {/* 始终显示连接钱包按钮，即使之前连接失败 */}
-                    <button 
-                      onClick={connectWallet}
-                      className="btn btn-primary"
-                    >
-                      {account ? '重新连接钱包' : '连接钱包'}
-                    </button>
-                    <button 
-                      onClick={() => {
-                        localStorage.removeItem('token')
-                        localStorage.removeItem('user')
-                        setAccount(null)
-                        window.location.href = '/'
-                      }}
-                      className="btn btn-outline"
-                    >
-                      退出登录
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <Link href="/login" className="btn btn-outline">登录</Link>
-                    <Link href="/register" className="btn btn-primary">注册</Link>
-                  </>
-                )
+              {user ? (
+                <>
+                  <div className="bg-gray-light px-3 py-1 rounded-full text-sm font-medium text-gray-color border border-gray-medium">
+                    {user.username} ({user.role})
+                  </div>
+                  {/* 始终显示连接钱包按钮，即使之前连接失败 */}
+                  <button 
+                    onClick={connectWallet}
+                    className="btn btn-primary"
+                  >
+                    {account ? '重新连接钱包' : '连接钱包'}
+                  </button>
+                  <button 
+                    onClick={() => {
+                      localStorage.removeItem('token')
+                      localStorage.removeItem('user')
+                      setAccount(null)
+                      setUser(null)
+                      window.location.href = '/'
+                    }}
+                    className="btn btn-outline"
+                  >
+                    退出登录
+                  </button>
+                </>
               ) : (
                 <>
                   <Link href="/login" className="btn btn-outline">登录</Link>
@@ -686,23 +847,15 @@ export default function Assets() {
             <p className="text-gray-color">管理您的RWA资产，进行创建、存款和赎回操作</p>
             <div className="mt-4 flex justify-center">
               <div className="bg-white p-4 rounded-lg shadow-md">
-                <label className="form-label mr-4">选择角色:</label>
-                <select 
-                  value={userRole}
-                  onChange={(e) => setUserRole(e.target.value)}
-                  className="form-control"
-                >
-                  <option value="investor">投资者</option>
-                  <option value="issuer">发行方</option>
-                  <option value="custodian">托管方</option>
-                  <option value="regulator">监管者</option>
-                </select>
+                <label className="form-label mr-4">当前角色:</label>
+                <span className="text-primary-dark font-medium">{userRole === 'investor' ? '投资者' : userRole === 'issuer' ? '发行方' : userRole === 'custodian' ? '托管方' : '监管者'}</span>
               </div>
             </div>
           </div>
 
           {message && (
-            <div className={`alert ${status === 'success' ? 'alert-success' : 'alert-danger'}`}>
+            <div className={`alert ${status === 'success' ? 'alert-success' : status === 'error' ? 'alert-danger' : 'alert-info'}`}>
+              {status === 'info' && <div className="loading-spinner inline-block mr-2"></div>}
               {message}
             </div>
           )}
@@ -727,35 +880,45 @@ export default function Assets() {
                     <div className="loading-spinner"></div>
                     <p className="text-gray-color">加载中...</p>
                   </div>
-                ) : assets.length > 0 ? (
-                  <ul className="space-y-3">
-                    {assets.map((asset) => (
-                      <li 
-                        key={asset.assetId}
-                        onClick={() => handleAssetClick(asset)}
-                        className={`p-4 rounded-lg cursor-pointer transition-all duration-200 ${selectedAsset?.assetId === asset.assetId ? 'bg-primary-light bg-opacity-10 border border-primary-light' : 'hover:bg-gray-light border border-gray-medium border-opacity-20'}`}
-                      >
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <div className="font-semibold text-primary-dark">{asset.name}</div>
-                            <div className="text-sm text-gray-color">{asset.symbol}</div>
-                          </div>
-                          <div className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${asset.isActive ? 'bg-secondary-light bg-opacity-20 text-secondary-dark' : 'bg-gray-color bg-opacity-20 text-gray-color'}`}>
-                            {asset.isActive ? '活跃' : '暂停'}
-                          </div>
-                        </div>
-                        <div className="mt-2 text-sm text-gray-color">
+                ) : (
+                  (() => {
+                    // 过滤出活跃的资产
+                    const activeAssets = assets.filter(asset => asset.isActive);
+                    return activeAssets.length > 0 ? (
+                      <ul className="space-y-3">
+                        {activeAssets.map((asset) => (
+                          <li 
+                            key={asset.assetId}
+                            onClick={() => handleAssetClick(asset)}
+                            className={`p-4 rounded-lg cursor-pointer transition-all duration-200 ${selectedAsset?.assetId === asset.assetId ? 'bg-primary-light bg-opacity-10 border border-primary-light' : 'hover:bg-gray-light border border-gray-medium border-opacity-20'}`}
+                          >
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <div className="font-semibold text-primary-dark">{asset.name}</div>
+                                <div className="text-sm text-gray-color">{asset.symbol}</div>
+                              </div>
+                              <div className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${asset.isActive ? 'bg-secondary-light bg-opacity-20 text-secondary-dark' : 'bg-gray-color bg-opacity-20 text-gray-color'}`}>
+                                {asset.isActive ? '活跃' : '暂停'}
+                              </div>
+                            </div>
+                            <div className="mt-2 text-sm text-gray-color">
                           <div>ID: {asset.assetId}</div>
                           <div className="font-medium text-primary-dark">价值: ${(asset.totalValue / 100).toFixed(2)}</div>
+                          <div className="font-medium text-secondary-dark">代币总量: {asset.totalTokens}</div>
+                          <div className="font-medium text-primary-dark">代币价格: ${(Number(asset.totalValue) / Number(asset.totalTokens) / 100).toFixed(2)}</div>
+                          <div className="font-medium text-secondary-dark">我的余额: {userBalances[asset.assetId] || 0} 代币</div>
+                          <div className="font-medium text-secondary-dark">我的价值: ${(Number(userBalances[asset.assetId] || 0) * Number(asset.totalValue) / Number(asset.totalTokens) / 100).toFixed(2)}</div>
                         </div>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <div className="empty-state">
-                    <p className="empty-state-title">暂无资产</p>
-                    <p className="empty-state-description">点击"创建资产"按钮开始</p>
-                  </div>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <div className="empty-state">
+                        <p className="empty-state-title">暂无资产</p>
+                        <p className="empty-state-description">点击"创建资产"按钮开始</p>
+                      </div>
+                    );
+                  })()
                 )}
               </div>
             </div>
@@ -766,7 +929,7 @@ export default function Assets() {
                 <div className="card-header">
                   <h2 className="card-title text-primary-dark">资产详情</h2>
                 </div>
-                {selectedAsset ? (
+                {selectedAsset && selectedAsset.isActive ? (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
                       <div className="space-y-4">
@@ -799,6 +962,18 @@ export default function Assets() {
                         <div>
                           <h3 className="text-sm font-medium text-gray-color mb-1">代币数量</h3>
                           <p className="text-primary-dark font-medium">{selectedAsset.totalTokens}</p>
+                        </div>
+                        <div>
+                          <h3 className="text-sm font-medium text-gray-color mb-1">代币价格</h3>
+                          <p className="text-primary-dark font-medium">${(Number(selectedAsset.totalValue) / Number(selectedAsset.totalTokens) / 100).toFixed(2)}</p>
+                        </div>
+                        <div>
+                          <h3 className="text-sm font-medium text-gray-color mb-1">我的余额</h3>
+                          <p className="text-secondary-dark font-medium">{userBalances[selectedAsset.assetId] || 0} 代币</p>
+                        </div>
+                        <div>
+                          <h3 className="text-sm font-medium text-gray-color mb-1">我的价值</h3>
+                          <p className="text-secondary-dark font-medium">${(Number(userBalances[selectedAsset.assetId] || 0) * Number(selectedAsset.totalValue) / Number(selectedAsset.totalTokens) / 100).toFixed(2)}</p>
                         </div>
                         <div>
                           <h3 className="text-sm font-medium text-gray-color mb-1">代币地址</h3>
@@ -894,9 +1069,42 @@ export default function Assets() {
                   </form>
                 </div>
               )}
-
-              {/* 存款 - 仅发行方可见 */}
+              
+              {/* 下架资产 - 仅发行方可见 */}
               {userRole === 'issuer' && (
+                <div className="banking-card">
+                  <div className="card-header">
+                    <h2 className="card-title text-primary-dark">下架资产</h2>
+                  </div>
+                  <form onSubmit={handle下架}>
+                    <div className="form-group">
+                      <label htmlFor="下架AssetId" className="form-label">
+                        资产ID
+                      </label>
+                      <input
+                        type="text"
+                        id="下架AssetId"
+                        name="assetId"
+                        value={下架Form.assetId}
+                        onChange={(e) => handleInputChange(e, '下架')}
+                        required
+                        className="form-control"
+                        placeholder="输入要下架的资产ID"
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={isLoading}
+                      className="btn btn-danger w-full mt-6"
+                    >
+                      {isLoading ? '下架中...' : '下架资产'}
+                    </button>
+                  </form>
+                </div>
+              )}
+
+              {/* 存款 - 发行方和投资者可见 */}
+              {(userRole === 'issuer' || userRole === 'investor') && (
                 <div className="banking-card">
                   <div className="card-header">
                     <h2 className="card-title text-primary-dark">存款</h2>
@@ -932,6 +1140,7 @@ export default function Assets() {
                         placeholder="输入存款金额"
                       />
                     </div>
+
                     <button
                       type="submit"
                       disabled={isLoading}
@@ -980,6 +1189,7 @@ export default function Assets() {
                         placeholder="输入赎回数量"
                       />
                     </div>
+
                     <button
                       type="submit"
                       disabled={isLoading}
