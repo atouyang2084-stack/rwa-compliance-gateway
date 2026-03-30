@@ -2,6 +2,7 @@ package services
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"time"
 
@@ -18,8 +19,12 @@ type AuthService struct {
 
 // NewAuthService 创建认证服务实例
 func NewAuthService() *AuthService {
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if jwtSecret == "" {
+		jwtSecret = "default_jwt_secret_for_development"
+	}
 	return &AuthService{
-		jwtSecret: os.Getenv("JWT_SECRET"),
+		jwtSecret: jwtSecret,
 	}
 }
 
@@ -53,17 +58,30 @@ func (s *AuthService) RegisterUser(username, email, password, address, role stri
 
 // LoginUser 用户登录
 func (s *AuthService) LoginUser(username, password string) (string, *database.User, error) {
+	// 打印登录信息以便调试
+	fmt.Printf("Login attempt for user: %s\n", username)
+	
 	// 获取用户
 	user, err := database.GetUserByUsername(username)
 	if err != nil {
+		// 打印错误信息以便调试
+		fmt.Printf("GetUserByUsername error: %v\n", err)
 		return "", nil, errors.New("invalid username or password")
 	}
+
+	// 打印用户信息以便调试
+	fmt.Printf("User found: %s, Password hash: %s\n", user.Username, user.PasswordHash)
 
 	// 验证密码
 	err = bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password))
 	if err != nil {
+		// 打印错误信息以便调试
+		fmt.Printf("Password verification error: %v\n", err)
 		return "", nil, errors.New("invalid username or password")
 	}
+	
+	// 打印密码验证成功信息
+	fmt.Printf("Password verification successful for user: %s\n", username)
 
 	// 生成JWT令牌
 	token, err := s.GenerateToken(user)

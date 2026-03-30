@@ -2,17 +2,22 @@ package services
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 )
+
+// 全局制裁地址 map
+var globalSanctionedAddresses = make(map[string]bool)
+var sanctionsMutex sync.RWMutex
 
 // SanctionsService 制裁名单服务
 type SanctionsService struct {
 	apiKey     string
 	apiBaseURL string
 	client     *http.Client
-	sanctionedAddresses map[string]bool
 }
 
 // NewSanctionsService 创建制裁名单服务实例
@@ -23,7 +28,6 @@ func NewSanctionsService() *SanctionsService {
 		client: &http.Client{
 			Timeout: 30 * time.Second,
 		},
-		sanctionedAddresses: make(map[string]bool),
 	}
 	
 	// 初始化默认的制裁地址（临时方案）
@@ -35,9 +39,15 @@ func NewSanctionsService() *SanctionsService {
 // 初始化默认的制裁地址（临时方案）
 func (s *SanctionsService) initializeDefaultSanctions() {
 	// 模拟一些制裁地址
-	s.sanctionedAddresses["0x1234567890123456789012345678901234567890"] = true
-	s.sanctionedAddresses["0x0987654321098765432109876543210987654321"] = true
-	s.sanctionedAddresses["0xabcdef1234567890abcdef1234567890abcdef12"] = true
+	sanctionsMutex.Lock()
+	defer sanctionsMutex.Unlock()
+	
+	// 只有当全局制裁地址 map 为空时才初始化
+	if len(globalSanctionedAddresses) == 0 {
+		globalSanctionedAddresses["0x1234567890123456789012345678901234567890"] = true
+		globalSanctionedAddresses["0x0987654321098765432109876543210987654321"] = true
+		globalSanctionedAddresses["0xabcdef1234567890abcdef1234567890abcdef12"] = true
+	}
 }
 
 // SyncSanctionList 同步制裁名单
@@ -57,25 +67,42 @@ func (s *SanctionsService) SyncSanctionList() error {
 // IsAddressSanctioned 检查地址是否在制裁名单中
 func (s *SanctionsService) IsAddressSanctioned(address string) (bool, error) {
 	// 检查地址是否在制裁名单中
-	return s.sanctionedAddresses[address], nil
+	sanctionsMutex.RLock()
+	defer sanctionsMutex.RUnlock()
+	
+	isSanctioned := globalSanctionedAddresses[address]
+	if isSanctioned {
+		log.Printf("Sanctioned address detected: %s", address)
+	}
+	return isSanctioned, nil
 }
 
 // AddToSanctionList 手动添加地址到制裁名单
 func (s *SanctionsService) AddToSanctionList(address string) error {
-	s.sanctionedAddresses[address] = true
+	sanctionsMutex.Lock()
+	defer sanctionsMutex.Unlock()
+	
+	globalSanctionedAddresses[address] = true
+	log.Printf("Address added to sanction list: %s", address)
 	return nil
 }
 
 // RemoveFromSanctionList 从制裁名单中移除地址
 func (s *SanctionsService) RemoveFromSanctionList(address string) error {
-	delete(s.sanctionedAddresses, address)
+	sanctionsMutex.Lock()
+	defer sanctionsMutex.Unlock()
+	
+	delete(globalSanctionedAddresses, address)
 	return nil
 }
 
 // GetSanctionedAddresses 获取所有制裁地址
 func (s *SanctionsService) GetSanctionedAddresses() []string {
+	sanctionsMutex.RLock()
+	defer sanctionsMutex.RUnlock()
+	
 	var addresses []string
-	for addr := range s.sanctionedAddresses {
+	for addr := range globalSanctionedAddresses {
 		addresses = append(addresses, addr)
 	}
 	return addresses

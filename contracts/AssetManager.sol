@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import "./RWAToken.sol";
 import "./OracleManager.sol";
+import "./ComplianceRegistry.sol";
 
 contract AssetManager {
     // 资产信息结构体
@@ -35,6 +36,8 @@ contract AssetManager {
     
     // Oracle管理器
     OracleManager public oracleManager;
+    // 合规注册表
+    ComplianceRegistry public complianceRegistry;
     
     // 紧急暂停
     bool public paused = false;
@@ -66,9 +69,10 @@ contract AssetManager {
     }
 
     // 构造函数
-    constructor(address _oracleManager) {
+    constructor(address _oracleManager, address _complianceRegistry) {
         admin = msg.sender;
         oracleManager = OracleManager(_oracleManager);
+        complianceRegistry = ComplianceRegistry(_complianceRegistry);
     }
     
     // 暂停合约
@@ -89,6 +93,11 @@ contract AssetManager {
     function setOracleManager(address _oracleManager) external onlyAdmin {
         oracleManager = OracleManager(_oracleManager);
     }
+    
+    // 设置合规注册表
+    function setComplianceRegistry(address _complianceRegistry) external onlyAdmin {
+        complianceRegistry = ComplianceRegistry(_complianceRegistry);
+    }
 
     // 添加授权发行方
     function addAuthorizedIssuer(address issuer) external onlyAdmin {
@@ -106,6 +115,8 @@ contract AssetManager {
         require(bytes(assets[assetId].assetId).length > 0, "Asset not found");
         // 检查资产是否活跃
         require(assets[assetId].isActive, "Asset is not active");
+        // 检查调用者是否KYC验证通过
+        require(complianceRegistry.isKYCVerified(msg.sender), "KYC verification required");
 
         Asset storage asset = assets[assetId];
         uint256 oldValue = asset.totalValue;
@@ -137,6 +148,8 @@ contract AssetManager {
     function updateAssetValueWithOracle(string calldata assetId, uint256 quantity) external onlyAuthorizedIssuer whenNotPaused {
         // 检查资产是否存在
         require(bytes(assets[assetId].assetId).length > 0, "Asset not found");
+        // 检查调用者是否KYC验证通过
+        require(complianceRegistry.isKYCVerified(msg.sender), "KYC verification required");
 
         // 使用Oracle计算资产价值
         uint256 newValue = oracleManager.calculateAssetValue(assetId, quantity);
@@ -155,6 +168,8 @@ contract AssetManager {
     ) external onlyAuthorizedIssuer whenNotPaused returns (address) {
         // 检查资产ID是否已存在
         require(bytes(assets[assetId].assetId).length == 0, "Asset already exists");
+        // 检查调用者是否KYC验证通过
+        require(ComplianceRegistry(complianceRegistry).isKYCVerified(msg.sender), "KYC verification required");
 
         // 部署新的代币合约
         RWAToken token = new RWAToken(name, symbol, 2, complianceRegistry);
@@ -188,6 +203,8 @@ contract AssetManager {
         // 检查资产是否存在且活跃
         require(bytes(assets[assetId].assetId).length > 0, "Asset not found");
         require(assets[assetId].isActive, "Asset is not active");
+        // 检查调用者是否KYC验证通过
+        require(complianceRegistry.isKYCVerified(msg.sender), "KYC verification required");
 
         Asset storage asset = assets[assetId];
 
@@ -208,6 +225,8 @@ contract AssetManager {
         // 检查资产是否存在且活跃
         require(bytes(assets[assetId].assetId).length > 0, "Asset not found");
         require(assets[assetId].isActive, "Asset is not active");
+        // 检查调用者是否KYC验证通过
+        require(complianceRegistry.isKYCVerified(msg.sender), "KYC verification required");
 
         Asset storage asset = assets[assetId];
 

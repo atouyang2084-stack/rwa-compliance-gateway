@@ -84,6 +84,10 @@ export default function KYC() {
         setMessage('KYC验证成功！')
         setVerificationId(data.verificationId)
         setStatus('success')
+        // 验证成功后，自动跳转到资产管理页面
+        setTimeout(() => {
+          window.location.href = '/assets'
+        }, 2000)
       } else {
         setMessage(`验证失败: ${data.error}`)
         setStatus('error')

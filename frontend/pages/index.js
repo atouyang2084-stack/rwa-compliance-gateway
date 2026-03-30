@@ -50,6 +50,9 @@ export default function Home() {
               <Link href="/" className="nav-link active">首页</Link>
               <Link href="/kyc" className="nav-link">KYC验证</Link>
               <Link href="/assets" className="nav-link">资产管理</Link>
+              {user && user.role === 'regulator' && (
+                <Link href="/compliance" className="nav-link">合规管理</Link>
+              )}
               {user ? (
                 <>
                   <div className="bg-gray-light px-3 py-1 rounded-full text-sm font-medium text-gray-color border border-gray-medium">

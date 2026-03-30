@@ -30,9 +30,11 @@ func RegisterRoutes(r *gin.Engine) {
 			compliance := authGroup.Group("/compliance")
 			{
 				compliance.POST("/verify", VerifyKYC)
+				compliance.GET("/status", GetKYCStatus)
 				// 制裁名单管理
-				compliance.GET("/sanction-list", GetSanctionList)
-				compliance.POST("/sync-sanction-list", SyncSanctionList)
+compliance.GET("/sanction-list", GetSanctionList)
+compliance.POST("/sanction-list", GetSanctionList)
+compliance.POST("/sync-sanction-list", SyncSanctionList)
 				// 司法管辖区管理
 				compliance.POST("/jurisdiction", AddJurisdiction)
 				compliance.PUT("/jurisdiction/restrict", RestrictJurisdiction)
@@ -47,6 +49,7 @@ func RegisterRoutes(r *gin.Engine) {
 			assets.GET("/list", GetAssets)
 			assets.GET("/details", GetAssetDetails)
 			assets.GET("/balances", GetUserBalances)
+			assets.GET("/total-balance", GetAssetTotalBalance)
 			assets.POST("/create", CreateAsset)
 				assets.POST("/deposit", DepositAsset)
 				assets.POST("/redeem", RedeemAsset)

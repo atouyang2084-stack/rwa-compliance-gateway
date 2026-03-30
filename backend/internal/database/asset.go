@@ -10,7 +10,7 @@ type Asset struct {
 	AssetID      string
 	Name         string
 	Symbol       string
-	TotalValue   uint64
+	TotalValue   float64
 	TotalTokens  uint64
 	TokenAddress string
 	IsActive     bool
@@ -58,7 +58,7 @@ func GetAssetByID(assetID string) (Asset, error) {
 }
 
 // UpdateAssetValue 更新资产价值
-func UpdateAssetValue(assetID string, value uint64, isDeposit bool) error {
+func UpdateAssetValue(assetID string, value float64, isDeposit bool) error {
 	var err error
 	if isDeposit {
 		_, err = DB.Exec(

@@ -15,6 +15,7 @@ export default function Assets() {
   const [userRole, setUserRole] = useState('investor') // 默认角色为投资者
   const [user, setUser] = useState(null) // 用户信息
   const [userBalances, setUserBalances] = useState({}) // 用户资产余额
+  const [assetTotalBalances, setAssetTotalBalances] = useState({}) // 资产总余额（所有用户的余额之和）
   
   // 资产创建表单
   const [createForm, setCreateForm] = useState({
@@ -29,6 +30,7 @@ export default function Assets() {
     assetId: '',
     value: ''
   })
+  const [isKYCVerified, setIsKYCVerified] = useState(false) // KYC验证状态
   
   // 赎回表单
   const [redeemForm, setRedeemForm] = useState({
@@ -52,6 +54,20 @@ export default function Assets() {
   const [下架Form, set下架Form] = useState({
     assetId: ''
   })
+
+  // 监听user变化，当用户信息更新时重新检查KYC状态
+  useEffect(() => {
+    // 延迟检查，确保checkKYCStatus函数已定义
+    const timer = setTimeout(() => {
+      if (user && user.address) {
+        console.log('=== KYC状态检查触发 ===')
+        console.log('用户地址:', user.address)
+        console.log('当前KYC状态:', isKYCVerified)
+        checkKYCStatus(user.address)
+      }
+    }, 100)
+    return () => clearTimeout(timer)
+  }, [user])
 
   useEffect(() => {
     // 检查是否有以太坊钱包
@@ -79,6 +95,45 @@ export default function Assets() {
     }
   }, [])
 
+  // 检查KYC状态
+  const checkKYCStatus = async (address) => {
+    if (!address) {
+      console.log('checkKYCStatus: address is null or undefined')
+      return
+    }
+    
+    const token = localStorage.getItem('token')
+    if (!token) {
+      console.log('checkKYCStatus: token is null or undefined')
+      return
+    }
+    
+    try {
+      console.log('正在检查KYC状态，地址:', address)
+      const response = await fetch(`/api/compliance/status?address=${address}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'X-User-Role': userRole
+        }
+      })
+      
+      console.log('KYC API响应状态:', response.status)
+      
+      if (response.ok) {
+        const data = await response.json()
+        console.log('KYC API响应数据:', data)
+        setIsKYCVerified(data.verified || false)
+        console.log('设置KYC验证状态为:', data.verified)
+      } else {
+        console.error('KYC API错误:', response.status, response.statusText)
+        setIsKYCVerified(false)
+      }
+    } catch (error) {
+      console.error('Error checking KYC status:', error)
+      setIsKYCVerified(false)
+    }
+  }
+
   const connectWallet = async () => {
     let ethProvider = provider
     if (!ethProvider && typeof window !== 'undefined' && typeof window.ethereum !== 'undefined') {
@@ -94,6 +149,12 @@ export default function Assets() {
       const accounts = await ethProvider.send('eth_requestAccounts', [])
       const accountAddress = accounts[0]
       setAccount(accountAddress)
+      
+      // 连接钱包成功后，自动查询KYC状态
+      if (user && user.address) {
+        await checkKYCStatus(user.address)
+      }
+      
       // 连接钱包成功后获取资产列表
       // 等待状态更新后再调用fetchAssets
       setTimeout(() => {
@@ -139,7 +200,7 @@ export default function Assets() {
       if (!response.ok) {
         // 如果是未授权或服务器错误，重定向到首页
         if (response.status === 401 || response.status === 500) {
-          window.location.href = '/'
+          window.location.href = '/' 
           return
         }
         return
@@ -154,6 +215,83 @@ export default function Assets() {
       setUserBalances(balancesMap)
     } catch (error) {
       console.error('Error fetching user balances:', error)
+    }
+  }
+
+  const fetchAssetTotalBalances = async () => {
+    // 检查是否已登录
+    if (typeof window === 'undefined') {
+      return
+    }
+    
+    const token = localStorage.getItem('token')
+    if (!token) {
+      return
+    }
+    
+    try {
+      // 直接获取特定资产的总余额（如果有选中的资产）
+      if (selectedAsset) {
+        const response = await fetch(`/api/assets/total-balance?assetId=${selectedAsset.assetId}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'X-User-Role': userRole
+          }
+        })
+        
+        if (response.ok) {
+          const data = await response.json()
+          const totalBalancesMap = { ...assetTotalBalances }
+          totalBalancesMap[selectedAsset.assetId] = data.totalBalance
+          console.log('Asset total balance for', selectedAsset.assetId, ':', data.totalBalance)
+          setAssetTotalBalances(totalBalancesMap)
+        } else {
+          console.error(`Failed to fetch total balance for asset ${selectedAsset.assetId}:`, response.status)
+        }
+      }
+      
+      // 获取所有资产
+      const assetsResponse = await fetch('/api/assets/list', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'X-User-Role': userRole
+        }
+      })
+      
+      if (!assetsResponse.ok) {
+        // 如果是未授权或服务器错误，重定向到首页
+        if (assetsResponse.status === 401 || assetsResponse.status === 500) {
+          window.location.href = '/' 
+          return
+        }
+        return
+      }
+      
+      const assetsData = await assetsResponse.json()
+      const assets = assetsData.assets
+      
+      // 为每个资产获取总余额
+      const totalBalancesMap = { ...assetTotalBalances }
+      for (const asset of assets) {
+        const response = await fetch(`/api/assets/total-balance?assetId=${asset.assetId}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'X-User-Role': userRole
+          }
+        })
+        
+        if (response.ok) {
+          const data = await response.json()
+          totalBalancesMap[asset.assetId] = data.totalBalance
+        } else {
+          console.error(`Failed to fetch total balance for asset ${asset.assetId}:`, response.status)
+        }
+      }
+      
+      console.log('Asset total balances:', totalBalancesMap)
+      setAssetTotalBalances(totalBalancesMap)
+    } catch (error) {
+      console.error('Error fetching asset total balances:', error)
     }
   }
 
@@ -190,7 +328,7 @@ export default function Assets() {
       if (!response.ok) {
         // 如果是未授权或服务器错误，重定向到首页
         if (response.status === 401 || response.status === 500) {
-          window.location.href = '/'
+          window.location.href = '/' 
           return
         }
         throw new Error(`HTTP error! status: ${response.status}`)
@@ -200,6 +338,8 @@ export default function Assets() {
       setAssets(data.assets)
       // 获取用户资产余额
       await fetchUserBalances()
+      // 获取资产总余额
+      await fetchAssetTotalBalances()
       // 如果当前有选中的资产，更新其信息
       if (selectedAsset) {
         const updatedAsset = data.assets.find(asset => asset.assetId === selectedAsset.assetId)
@@ -319,7 +459,13 @@ export default function Assets() {
       return
     }
     
-    const userAddress = user.address
+    if (!account) {
+      setMessage('请先连接钱包')
+      setStatus('error')
+      return
+    }
+    
+    const userAddress = user.address // 使用用户地址，与获取余额时使用的地址一致
     
     setIsLoading(true)
     setMessage('')
@@ -334,8 +480,9 @@ export default function Assets() {
         },
         body: JSON.stringify({
           assetId: depositForm.assetId,
-          value: parseInt(depositForm.value) * 100, // 转换为美分
-          userAddress: userAddress
+          value: parseFloat(depositForm.value), // 直接使用美元
+          userAddress: userAddress,
+          nonce: Date.now().toString() // 添加防重复提交的nonce
         })
       })
 
@@ -423,7 +570,7 @@ export default function Assets() {
       if (!response.ok) {
         // 如果是未授权或服务器错误，重定向到首页
         if (response.status === 401 || response.status === 500) {
-          window.location.href = '/'
+          window.location.href = '/' 
           return
         }
         const data = await response.json()
@@ -498,14 +645,15 @@ export default function Assets() {
           assetId: transferForm.assetId,
           fromAddress: userAddress,
           toAddress: transferForm.toAddress,
-          amount: parseInt(transferForm.amount)
+          amount: parseInt(transferForm.amount),
+          nonce: Date.now().toString() // 添加防重复提交的nonce
         })
       })
 
       if (!response.ok) {
         // 如果是未授权或服务器错误，重定向到首页
         if (response.status === 401 || response.status === 500) {
-          window.location.href = '/'
+          window.location.href = '/' 
           return
         }
         const data = await response.json()
@@ -575,7 +723,7 @@ export default function Assets() {
       if (!response.ok) {
         // 如果是未授权或服务器错误，重定向到首页
         if (response.status === 401 || response.status === 500) {
-          window.location.href = '/'
+          window.location.href = '/' 
           return
         }
         const data = await response.json()
@@ -645,7 +793,7 @@ export default function Assets() {
       if (!response.ok) {
         // 如果是未授权或服务器错误，重定向到首页
         if (response.status === 401 || response.status === 500) {
-          window.location.href = '/'
+          window.location.href = '/' 
           return
         }
         const data = await response.json()
@@ -715,7 +863,7 @@ export default function Assets() {
       if (!response.ok) {
         // 如果是未授权或服务器错误，重定向到首页
         if (response.status === 401 || response.status === 500) {
-          window.location.href = '/'
+          window.location.href = '/' 
           return
         }
         const data = await response.json()
@@ -752,6 +900,8 @@ export default function Assets() {
   const handleAssetClick = async (asset) => {
     // 直接使用列表中的资产数据，不再单独请求详情
     setSelectedAsset(asset)
+    // 获取该资产的总余额
+    await fetchAssetTotalBalances()
   }
 
   const handleInputChange = (e, form) => {
@@ -803,6 +953,9 @@ export default function Assets() {
               <Link href="/" className="nav-link">首页</Link>
               <Link href="/kyc" className="nav-link">KYC验证</Link>
               <Link href="/assets" className="nav-link active">资产管理</Link>
+              {user && user.role === 'regulator' && (
+                <Link href="/compliance" className="nav-link">合规管理</Link>
+              )}
               {user ? (
                 <>
                   <div className="bg-gray-light px-3 py-1 rounded-full text-sm font-medium text-gray-color border border-gray-medium">
@@ -845,10 +998,21 @@ export default function Assets() {
           <div className="text-center mb-12">
             <h1 className="text-3xl font-bold text-primary-dark mb-4">资产管理</h1>
             <p className="text-gray-color">管理您的RWA资产，进行创建、存款和赎回操作</p>
-            <div className="mt-4 flex justify-center">
+            <div className="mt-4 flex justify-center items-center gap-4">
               <div className="bg-white p-4 rounded-lg shadow-md">
                 <label className="form-label mr-4">当前角色:</label>
                 <span className="text-primary-dark font-medium">{userRole === 'investor' ? '投资者' : userRole === 'issuer' ? '发行方' : userRole === 'custodian' ? '托管方' : '监管者'}</span>
+              </div>
+              <div className="bg-white p-4 rounded-lg shadow-md">
+                <label className="form-label mr-4">KYC状态:</label>
+                <span className={`font-medium ${isKYCVerified ? 'text-green-600' : 'text-red-600'}`}>
+                  {isKYCVerified ? '✓ 已验证' : '✗ 未验证'}
+                </span>
+                {!isKYCVerified && account && (
+                  <Link href="/kyc" className="ml-4 text-primary hover:underline">
+                    去完成验证 →
+                  </Link>
+                )}
               </div>
             </div>
           </div>
@@ -903,11 +1067,13 @@ export default function Assets() {
                             </div>
                             <div className="mt-2 text-sm text-gray-color">
                           <div>ID: {asset.assetId}</div>
-                          <div className="font-medium text-primary-dark">价值: ${(asset.totalValue / 100).toFixed(2)}</div>
+                          <div className="font-medium text-primary-dark">价值: ${asset.totalValue.toFixed(2)}</div>
                           <div className="font-medium text-secondary-dark">代币总量: {asset.totalTokens}</div>
-                          <div className="font-medium text-primary-dark">代币价格: ${(Number(asset.totalValue) / Number(asset.totalTokens) / 100).toFixed(2)}</div>
-                          <div className="font-medium text-secondary-dark">我的余额: {userBalances[asset.assetId] || 0} 代币</div>
-                          <div className="font-medium text-secondary-dark">我的价值: ${(Number(userBalances[asset.assetId] || 0) * Number(asset.totalValue) / Number(asset.totalTokens) / 100).toFixed(2)}</div>
+                          <div className="font-medium text-primary-dark">代币价格: ${(Number(asset.totalValue) / Number(asset.totalTokens)).toFixed(2)}</div>
+                          <div className="font-medium text-secondary-dark">我的余额: {Math.min(userBalances[asset.assetId] || 0, asset.totalTokens)} 代币</div>
+                          <div className="font-medium text-secondary-dark">已售出: {Math.min(assetTotalBalances[asset.assetId] || 0, asset.totalTokens)} 代币</div>
+                          <div className="font-medium text-secondary-dark">可购买: {Math.max(0, asset.totalTokens - (assetTotalBalances[asset.assetId] || 0))} 代币</div>
+                          <div className="font-medium text-secondary-dark">我的价值: ${(Math.min(userBalances[asset.assetId] || 0, asset.totalTokens) * Number(asset.totalValue) / Number(asset.totalTokens)).toFixed(2)}</div>
                         </div>
                           </li>
                         ))}
@@ -957,23 +1123,31 @@ export default function Assets() {
                       <div className="space-y-4">
                         <div>
                           <h3 className="text-sm font-medium text-gray-color mb-1">总价值</h3>
-                          <p className="text-primary-dark font-medium">${(selectedAsset.totalValue / 100).toFixed(2)}</p>
+                          <p className="text-primary-dark font-medium">${selectedAsset.totalValue.toFixed(2)}</p>
                         </div>
                         <div>
                           <h3 className="text-sm font-medium text-gray-color mb-1">代币数量</h3>
                           <p className="text-primary-dark font-medium">{selectedAsset.totalTokens}</p>
                         </div>
                         <div>
+                          <h3 className="text-sm font-medium text-gray-color mb-1">已售出代币</h3>
+                          <p className="text-primary-dark font-medium">{Math.min(assetTotalBalances[selectedAsset.assetId] || 0, selectedAsset.totalTokens)} 代币</p>
+                        </div>
+                        <div>
+                          <h3 className="text-sm font-medium text-gray-color mb-1">可购买代币</h3>
+                          <p className="text-primary-dark font-medium">{Math.max(0, selectedAsset.totalTokens - (assetTotalBalances[selectedAsset.assetId] || 0))} 代币</p>
+                        </div>
+                        <div>
                           <h3 className="text-sm font-medium text-gray-color mb-1">代币价格</h3>
-                          <p className="text-primary-dark font-medium">${(Number(selectedAsset.totalValue) / Number(selectedAsset.totalTokens) / 100).toFixed(2)}</p>
+                          <p className="text-primary-dark font-medium">${(Number(selectedAsset.totalValue) / Number(selectedAsset.totalTokens)).toFixed(2)}</p>
                         </div>
                         <div>
                           <h3 className="text-sm font-medium text-gray-color mb-1">我的余额</h3>
-                          <p className="text-secondary-dark font-medium">{userBalances[selectedAsset.assetId] || 0} 代币</p>
+                          <p className="text-secondary-dark font-medium">{Math.min(userBalances[selectedAsset.assetId] || 0, selectedAsset.totalTokens)} 代币</p>
                         </div>
                         <div>
                           <h3 className="text-sm font-medium text-gray-color mb-1">我的价值</h3>
-                          <p className="text-secondary-dark font-medium">${(Number(userBalances[selectedAsset.assetId] || 0) * Number(selectedAsset.totalValue) / Number(selectedAsset.totalTokens) / 100).toFixed(2)}</p>
+                          <p className="text-secondary-dark font-medium">${(Math.min(userBalances[selectedAsset.assetId] || 0, selectedAsset.totalTokens) * Number(selectedAsset.totalValue) / Number(selectedAsset.totalTokens)).toFixed(2)}</p>
                         </div>
                         <div>
                           <h3 className="text-sm font-medium text-gray-color mb-1">代币地址</h3>
@@ -1045,7 +1219,7 @@ export default function Assets() {
                       </div>
                       <div className="form-group">
                         <label htmlFor="initialValue" className="form-label">
-                          初始价值（美分）
+                          初始价值（美元）
                         </label>
                         <input
                           type="number"
@@ -1127,7 +1301,7 @@ export default function Assets() {
                     </div>
                     <div className="form-group">
                       <label htmlFor="depositValue" className="form-label">
-                        存款金额（美分）
+                        存款金额（美元）
                       </label>
                       <input
                         type="number"
@@ -1143,10 +1317,20 @@ export default function Assets() {
 
                     <button
                       type="submit"
-                      disabled={isLoading}
+                      disabled={isLoading || !isKYCVerified || (() => {
+                        const asset = assets.find(a => a.assetId === depositForm.assetId);
+                        if (!asset) return false;
+                        const totalBalance = assetTotalBalances[depositForm.assetId] || 0;
+                        return totalBalance >= asset.totalTokens;
+                      })()}
                       className="btn btn-secondary w-full"
                     >
-                      {isLoading ? '存款中...' : '存款'}
+                      {isLoading ? '存款中...' : !isKYCVerified ? '请先完成KYC验证' : (() => {
+                        const asset = assets.find(a => a.assetId === depositForm.assetId);
+                        if (!asset) return '存款';
+                        const totalBalance = assetTotalBalances[depositForm.assetId] || 0;
+                        return totalBalance >= asset.totalTokens ? '已达到总供应量' : '存款';
+                      })()}
                     </button>
                   </form>
                 </div>
@@ -1255,10 +1439,10 @@ export default function Assets() {
                     </div>
                     <button
                       type="submit"
-                      disabled={isLoading}
+                      disabled={isLoading || !isKYCVerified}
                       className="btn btn-primary w-full"
                     >
-                      {isLoading ? '转账中...' : '转账'}
+                      {isLoading ? '转账中...' : !isKYCVerified ? '请先完成KYC验证' : '转账'}
                     </button>
                   </form>
                 </div>

@@ -3,12 +3,19 @@ package api
 import (
 	"log"
 	"net/http"
+	"sync"
 
 	"rwaGateway/internal/database"
 	"rwaGateway/internal/services"
 	"rwaGateway/utils"
 
 	"github.com/gin-gonic/gin"
+)
+
+// 用于存储已使用的nonce值，防止重复提交
+var (
+	nonceStore = make(map[string]bool)
+	nonceMutex sync.Mutex
 )
 
 // VerifyKYC 处理KYC验证请求
@@ -46,6 +53,12 @@ func VerifyKYC(c *gin.Context) {
 
 	if !success {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "KYC verification failed"})
+		return
+	}
+
+	// 更新数据库中的KYC验证状态
+	if err := database.UpdateKYCVerified(request.UserAddress, true); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update KYC status"})
 		return
 	}
 
@@ -99,15 +112,41 @@ func HealthCheck(c *gin.Context) {
 	})
 }
 
+// GetKYCStatus 获取用户的KYC验证状态
+func GetKYCStatus(c *gin.Context) {
+	address := c.Query("address")
+	if address == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "address is required"})
+		return
+	}
+
+	// 从数据库获取KYC验证状态
+	verified, err := database.GetKYCVerified(address)
+	if err != nil {
+		// 如果数据库中没有记录，使用KYC服务进行验证（测试模式）
+		kycService := services.NewOnfidoAPI()
+		verified, err = kycService.IsKYCVerified(address)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"verified": verified,
+		"address":  address,
+	})
+}
+
 // CreateAsset 创建新资产
 func CreateAsset(c *gin.Context) {
 	// 解析请求体
 	var request struct {
-		AssetId            string `json:"assetId" binding:"required"`
-		Name               string `json:"name" binding:"required"`
-		Symbol             string `json:"symbol" binding:"required"`
-		InitialValue       uint64 `json:"initialValue" binding:"required"`
-		ComplianceRegistry string `json:"complianceRegistry" binding:"required"`
+		AssetId            string  `json:"assetId" binding:"required"`
+		Name               string  `json:"name" binding:"required"`
+		Symbol             string  `json:"symbol" binding:"required"`
+		InitialValue       float64 `json:"initialValue" binding:"required"`
+		ComplianceRegistry string  `json:"complianceRegistry" binding:"required"`
 	}
 
 	if err := c.ShouldBindJSON(&request); err != nil {
@@ -128,7 +167,7 @@ func CreateAsset(c *gin.Context) {
 	}
 
 	// 输入验证：验证金额
-	if !utils.IsValidAmount(int64(request.InitialValue)) {
+	if request.InitialValue <= 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid initial value"})
 		return
 	}
@@ -140,7 +179,7 @@ func CreateAsset(c *gin.Context) {
 		AssetID:      request.AssetId,
 		Name:         request.Name,
 		Symbol:       request.Symbol,
-		TotalValue:   request.InitialValue,
+		TotalValue:   float64(request.InitialValue),
 		TotalTokens:  fixedTotalTokens,
 		TokenAddress: "0x8221201A5c1c62bDfB0431beAD8843931f2A72aE", // 模拟地址
 		IsActive:     true,
@@ -167,9 +206,10 @@ func CreateAsset(c *gin.Context) {
 func DepositAsset(c *gin.Context) {
 	// 解析请求体
 	var request struct {
-		AssetId     string `json:"assetId" binding:"required"`
-		Value       uint64 `json:"value" binding:"required"`
-		UserAddress string `json:"userAddress" binding:"required"`
+		AssetId     string  `json:"assetId" binding:"required"`
+		Value       float64 `json:"value" binding:"required"`
+		UserAddress string  `json:"userAddress" binding:"required"`
+		Nonce       string  `json:"nonce" binding:"required"` // 防重复提交
 	}
 
 	if err := c.ShouldBindJSON(&request); err != nil {
@@ -184,7 +224,7 @@ func DepositAsset(c *gin.Context) {
 	}
 
 	// 输入验证：验证金额
-	if !utils.IsValidAmount(int64(request.Value)) {
+	if request.Value <= 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid value"})
 		return
 	}
@@ -195,6 +235,28 @@ func DepositAsset(c *gin.Context) {
 		return
 	}
 
+	// 检查地址是否在制裁名单中
+	sanctionsService := services.NewSanctionsService()
+	isSanctioned, err := sanctionsService.IsAddressSanctioned(request.UserAddress)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to check sanction status"})
+		return
+	}
+	if isSanctioned {
+		c.JSON(http.StatusForbidden, gin.H{"error": "User address is sanctioned"})
+		return
+	}
+
+	// 检查nonce是否已使用，防止重复提交
+	nonceMutex.Lock()
+	if nonceStore[request.Nonce] {
+		nonceMutex.Unlock()
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Duplicate request detected"})
+		return
+	}
+	nonceStore[request.Nonce] = true
+	nonceMutex.Unlock()
+
 	// 检查资产是否存在
 	asset, err := database.GetAssetByID(request.AssetId)
 	if err != nil {
@@ -204,9 +266,31 @@ func DepositAsset(c *gin.Context) {
 		return
 	}
 
-	// 计算应该分配的代币数量
-	// 代币数量 = 存入金额 * 代币总量 / 原资产价值
-	// 这样可以保持代币价格与资产价值成正比
+	// 检查用户是否已KYC验证
+	kycService := services.NewOnfidoAPI()
+	isVerified, err := kycService.IsKYCVerified(request.UserAddress)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to check KYC status"})
+		return
+	}
+	if !isVerified {
+		c.JSON(http.StatusForbidden, gin.H{"error": "User KYC not verified"})
+		return
+	}
+
+	// 检查总余额是否超过代币总量
+	allBalances, err := database.GetAllUserAssetBalances(request.AssetId)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	currentTotalBalance := 0
+	for _, balance := range allBalances {
+		currentTotalBalance += balance.Balance
+	}
+
+	// 计算代币数量
 	var tokensToAdd int
 	if asset.TotalValue == 0 {
 		// 首次存款，设置固定的代币总量
@@ -225,7 +309,16 @@ func DepositAsset(c *gin.Context) {
 		if tokensToAdd < 1 {
 			tokensToAdd = 1
 		}
-		
+	}
+
+	// 检查是否超过总供应量
+	if currentTotalBalance+tokensToAdd > int(asset.TotalTokens) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Exceeds total token supply"})
+		return
+	}
+
+	// 当资产价值不为0时，按比例调整现有用户的余额
+	if asset.TotalValue != 0 {
 		// 获取所有用户的资产余额
 		allBalances, err := database.GetAllUserAssetBalances(request.AssetId)
 		if err != nil {
@@ -311,12 +404,36 @@ func RedeemAsset(c *gin.Context) {
 		return
 	}
 
+	// 检查地址是否在制裁名单中
+	sanctionsService := services.NewSanctionsService()
+	isSanctioned, err := sanctionsService.IsAddressSanctioned(request.UserAddress)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to check sanction status"})
+		return
+	}
+	if isSanctioned {
+		c.JSON(http.StatusForbidden, gin.H{"error": "User address is sanctioned"})
+		return
+	}
+
 	// 检查资产是否存在
 	asset, err := database.GetAssetByID(request.AssetId)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{
 			"error": "Asset not found",
 		})
+		return
+	}
+
+	// 检查用户是否已KYC验证
+	kycService := services.NewOnfidoAPI()
+	isVerified, err := kycService.IsKYCVerified(request.UserAddress)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to check KYC status"})
+		return
+	}
+	if !isVerified {
+		c.JSON(http.StatusForbidden, gin.H{"error": "User KYC not verified"})
 		return
 	}
 
@@ -336,11 +453,11 @@ func RedeemAsset(c *gin.Context) {
 
 	// 计算赎回的价值
 	// 赎回价值 = 代币数量 * 资产总价值 / 代币总量
-	valueToRedeem := uint64(float64(request.Tokens) * float64(asset.TotalValue) / float64(asset.TotalTokens))
+	valueToRedeem := float64(request.Tokens) * asset.TotalValue / float64(asset.TotalTokens)
 
-	// 确保至少赎回1美分
-	if valueToRedeem < 1 {
-		valueToRedeem = 1
+	// 确保至少赎回0.01美元
+	if valueToRedeem < 0.01 {
+		valueToRedeem = 0.01
 	}
 
 	// 更新资产价值
@@ -441,6 +558,7 @@ func TransferAsset(c *gin.Context) {
 		FromAddress string `json:"fromAddress" binding:"required"`
 		ToAddress   string `json:"toAddress" binding:"required"`
 		Amount      uint64 `json:"amount" binding:"required"`
+		Nonce       string `json:"nonce" binding:"required"` // 防重复提交
 	}
 
 	if err := c.ShouldBindJSON(&request); err != nil {
@@ -465,6 +583,16 @@ func TransferAsset(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid amount"})
 		return
 	}
+
+	// 检查nonce是否已使用，防止重复提交
+	nonceMutex.Lock()
+	if nonceStore[request.Nonce] {
+		nonceMutex.Unlock()
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Duplicate request detected"})
+		return
+	}
+	nonceStore[request.Nonce] = true
+	nonceMutex.Unlock()
 
 	// 检查资产是否存在
 	_, err := database.GetAssetByID(request.AssetId)
@@ -497,6 +625,29 @@ func TransferAsset(c *gin.Context) {
 	}
 	if isSanctioned {
 		c.JSON(http.StatusForbidden, gin.H{"error": "Recipient address is sanctioned"})
+		return
+	}
+
+	// 检查用户是否已KYC验证
+	kycService := services.NewOnfidoAPI()
+	isVerified, err := kycService.IsKYCVerified(request.FromAddress)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to check KYC status"})
+		return
+	}
+	if !isVerified {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Sender KYC not verified"})
+		return
+	}
+
+	// 检查接收方是否已KYC验证
+	isVerified, err = kycService.IsKYCVerified(request.ToAddress)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to check KYC status"})
+		return
+	}
+	if !isVerified {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Recipient KYC not verified"})
 		return
 	}
 
@@ -709,11 +860,36 @@ func SyncSanctionList(c *gin.Context) {
 	})
 }
 
-// GetSanctionList 获取制裁名单
+// GetSanctionList 获取制裁名单或添加制裁地址
 func GetSanctionList(c *gin.Context) {
 	sanctionsService := services.NewSanctionsService()
 	
-	// 获取当前制裁地址列表
+	// 处理 POST 请求：添加制裁地址
+	if c.Request.Method == "POST" {
+		var request struct {
+			Address string `json:"address" binding:"required"`
+		}
+		
+		if err := c.ShouldBindJSON(&request); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		
+		// 添加制裁地址
+		sanctionsService.AddToSanctionList(request.Address)
+		
+		// 获取更新后的制裁地址列表
+		sanctionedAddresses := sanctionsService.GetSanctionedAddresses()
+		
+		c.JSON(http.StatusOK, gin.H{
+			"success": true,
+			"message": "Sanction address added successfully",
+			"sanctionedAddresses": sanctionedAddresses,
+		})
+		return
+	}
+	
+	// 处理 GET 请求：获取制裁地址列表
 	sanctionedAddresses := sanctionsService.GetSanctionedAddresses()
 
 	c.JSON(http.StatusOK, gin.H{
@@ -854,6 +1030,34 @@ func GetUserBalances(c *gin.Context) {
 	})
 }
 
+// GetAssetTotalBalance 获取资产的总余额（所有用户的余额之和）
+func GetAssetTotalBalance(c *gin.Context) {
+	assetId := c.Query("assetId")
+	if assetId == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "assetId is required"})
+		return
+	}
+
+	// 获取所有用户的资产余额
+	allBalances, err := database.GetAllUserAssetBalances(assetId)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 计算总余额
+	totalBalance := 0
+	for _, balance := range allBalances {
+		totalBalance += balance.Balance
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":       true,
+		"assetId":       assetId,
+		"totalBalance":  totalBalance,
+	})
+}
+
 // RegisterUser 用户注册
 func RegisterUser(c *gin.Context) {
 	var request struct {
@@ -875,6 +1079,18 @@ func RegisterUser(c *gin.Context) {
 		return
 	}
 
+	// 检查地址是否在制裁名单中
+	sanctionsService := services.NewSanctionsService()
+	isSanctioned, err := sanctionsService.IsAddressSanctioned(request.Address)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to check sanction status"})
+		return
+	}
+	if isSanctioned {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Address is sanctioned"})
+		return
+	}
+
 	// 设置默认角色
 	if request.Role == "" {
 		request.Role = "investor"
@@ -882,7 +1098,7 @@ func RegisterUser(c *gin.Context) {
 
 	// 注册用户
 	authService := services.NewAuthService()
-	err := authService.RegisterUser(request.Username, request.Email, request.Password, request.Address, request.Role)
+	err = authService.RegisterUser(request.Username, request.Email, request.Password, request.Address, request.Role)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return

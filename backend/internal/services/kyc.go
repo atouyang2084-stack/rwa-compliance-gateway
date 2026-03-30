@@ -200,3 +200,10 @@ func (api *OnfidoAPI) VerifyKYC(userAddress, verificationData string) (bool, str
 	// 返回成功响应
 	return true, verificationID, nil
 }
+
+// IsKYCVerified 检查用户是否已经完成KYC验证
+func (api *OnfidoAPI) IsKYCVerified(userAddress string) (bool, error) {
+	// 测试模式：所有用户都通过KYC验证
+	// 在实际项目中，应该查询数据库或调用KYC服务来检查用户的验证状态
+	return true, nil
+}
