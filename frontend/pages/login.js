@@ -31,11 +31,11 @@ export default function Login() {
         // 重定向到首页
         window.location.href = '/'
       } else {
-        setError(data.error || '登录失败')
+        setError(data.error || 'Login failed')
       }
     } catch (err) {
-      setError('网络错误，请稍后重试')
-      console.error('登录错误:', err)
+      setError('Network error, please try again later')
+      console.error('Login error:', err)
     } finally {
       setLoading(false)
     }
@@ -44,7 +44,7 @@ export default function Login() {
   return (
     <div className="min-h-screen bg-light-color page-transition">
       <Head>
-        <title>登录 - RWA Compliance Gateway</title>
+        <title>Login - RWA Compliance Gateway</title>
       </Head>
 
       {/* 导航栏 */}
@@ -56,10 +56,10 @@ export default function Login() {
               <div className="nav-brand-name">RWA Compliance Gateway</div>
             </div>
             <div className="nav-links">
-              <Link href="/" className="nav-link">首页</Link>
-              <Link href="/kyc" className="nav-link">KYC验证</Link>
-              <Link href="/assets" className="nav-link">资产管理</Link>
-              <Link href="/register" className="btn btn-outline">注册</Link>
+              <Link href="/" className="nav-link">Home</Link>
+              <Link href="/kyc" className="nav-link">KYC Verification</Link>
+              <Link href="/assets" className="nav-link">Asset Management</Link>
+              <Link href="/register" className="btn btn-outline">Register</Link>
             </div>
           </div>
         </div>
@@ -70,7 +70,7 @@ export default function Login() {
         <div className="container">
           <div className="max-w-md mx-auto">
             <div className="banking-card p-8">
-              <h2 className="text-2xl font-bold mb-6 text-center text-primary-dark">用户登录</h2>
+              <h2 className="text-2xl font-bold mb-6 text-center text-primary-dark">User Login</h2>
               
               {error && (
                 <div className="alert alert-error mb-4">
@@ -80,7 +80,7 @@ export default function Login() {
               
               <form onSubmit={handleLogin}>
                 <div className="form-group mb-4">
-                  <label htmlFor="username" className="form-label">用户名</label>
+                  <label htmlFor="username" className="form-label">Username</label>
                   <input
                     type="text"
                     id="username"
@@ -92,7 +92,7 @@ export default function Login() {
                 </div>
                 
                 <div className="form-group mb-6">
-                  <label htmlFor="password" className="form-label">密码</label>
+                  <label htmlFor="password" className="form-label">Password</label>
                   <input
                     type="password"
                     id="password"
@@ -108,12 +108,12 @@ export default function Login() {
                   className="btn btn-primary w-full" 
                   disabled={loading}
                 >
-                  {loading ? '登录中...' : '登录'}
+                  {loading ? 'Logging in...' : 'Login'}
                 </button>
                 
                 <div className="text-center mt-4">
                   <p className="text-gray-color">
-                    还没有账户？ <Link href="/register" className="text-primary-color hover:underline">立即注册</Link>
+                    Don't have an account? <Link href="/register" className="text-primary-color hover:underline">Register now</Link>
                   </p>
                 </div>
               </form>
@@ -128,12 +128,12 @@ export default function Login() {
           <div className="footer-content">
             <div>
               <h3 className="text-xl font-bold mb-2">RWA Compliance Gateway</h3>
-              <p className="text-gray-color">连接现实世界资产与DeFi生态</p>
+              <p className="text-gray-color">Connecting real-world assets with DeFi ecosystem</p>
             </div>
             <div className="footer-links">
-              <Link href="/" className="footer-link">首页</Link>
-              <Link href="/kyc" className="footer-link">KYC验证</Link>
-              <Link href="/assets" className="footer-link">资产管理</Link>
+              <Link href="/" className="footer-link">Home</Link>
+              <Link href="/kyc" className="footer-link">KYC Verification</Link>
+              <Link href="/assets" className="footer-link">Asset Management</Link>
             </div>
           </div>
           <div className="footer-copyright">

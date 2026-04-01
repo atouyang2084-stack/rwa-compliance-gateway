@@ -149,18 +149,16 @@ func GetUserByUsername(username string) (*User, error) {
 	// 打印查询信息以便调试
 	fmt.Printf("Querying user: %s\n", username)
 	err := DB.QueryRow(
-		"SELECT id, username, email, password_hash, address, role, created_at, updated_at FROM users WHERE username = ?",
+		"SELECT id, username, email, password_hash, address, role, kyc_verified, created_at, updated_at FROM users WHERE username = ?",
 		username,
-	).Scan(&user.ID, &user.Username, &user.Email, &user.PasswordHash, &user.Address, &user.Role, &user.CreatedAt, &user.UpdatedAt)
+	).Scan(&user.ID, &user.Username, &user.Email, &user.PasswordHash, &user.Address, &user.Role, &user.KYCVerified, &user.CreatedAt, &user.UpdatedAt)
 	if err != nil {
 		// 打印错误信息以便调试
 		fmt.Printf("Query error: %v\n", err)
 		return nil, err
 	}
 	// 打印查询结果以便调试
-	fmt.Printf("Found user: %s, ID: %d\n", user.Username, user.ID)
-	// 设置KYCVerified默认值
-	user.KYCVerified = false
+	fmt.Printf("Found user: %s, ID: %d, KYCVerified: %v\n", user.Username, user.ID, user.KYCVerified)
 	return &user, nil
 }
 
@@ -190,9 +188,9 @@ func GetKYCVerified(address string) (bool, error) {
 func GetUserByEmail(email string) (*User, error) {
 	var user User
 	err := DB.QueryRow(
-		"SELECT id, username, email, password_hash, address, role, created_at, updated_at FROM users WHERE email = ?",
+		"SELECT id, username, email, password_hash, address, role, kyc_verified, created_at, updated_at FROM users WHERE email = ?",
 		email,
-	).Scan(&user.ID, &user.Username, &user.Email, &user.PasswordHash, &user.Address, &user.Role, &user.CreatedAt, &user.UpdatedAt)
+	).Scan(&user.ID, &user.Username, &user.Email, &user.PasswordHash, &user.Address, &user.Role, &user.KYCVerified, &user.CreatedAt, &user.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -203,9 +201,9 @@ func GetUserByEmail(email string) (*User, error) {
 func GetUserByAddress(address string) (*User, error) {
 	var user User
 	err := DB.QueryRow(
-		"SELECT id, username, email, password_hash, address, role, created_at, updated_at FROM users WHERE address = ?",
+		"SELECT id, username, email, password_hash, address, role, kyc_verified, created_at, updated_at FROM users WHERE address = ?",
 		address,
-	).Scan(&user.ID, &user.Username, &user.Email, &user.PasswordHash, &user.Address, &user.Role, &user.CreatedAt, &user.UpdatedAt)
+	).Scan(&user.ID, &user.Username, &user.Email, &user.PasswordHash, &user.Address, &user.Role, &user.KYCVerified, &user.CreatedAt, &user.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}

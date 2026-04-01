@@ -31,11 +31,11 @@ export default function Register() {
         // 注册成功后重定向到登录页面
         window.location.href = '/login'
       } else {
-        setError(data.error || '注册失败')
+        setError(data.error || 'Registration failed')
       }
     } catch (err) {
-      setError('网络错误，请稍后重试')
-      console.error('注册错误:', err)
+      setError('Network error, please try again later')
+      console.error('Registration error:', err)
     } finally {
       setLoading(false)
     }
@@ -44,7 +44,7 @@ export default function Register() {
   return (
     <div className="min-h-screen bg-light-color page-transition">
       <Head>
-        <title>注册 - RWA Compliance Gateway</title>
+        <title>Register - RWA Compliance Gateway</title>
       </Head>
 
       {/* 导航栏 */}
@@ -56,10 +56,10 @@ export default function Register() {
               <div className="nav-brand-name">RWA Compliance Gateway</div>
             </div>
             <div className="nav-links">
-              <Link href="/" className="nav-link">首页</Link>
-              <Link href="/kyc" className="nav-link">KYC验证</Link>
-              <Link href="/assets" className="nav-link">资产管理</Link>
-              <Link href="/login" className="btn btn-primary">登录</Link>
+              <Link href="/" className="nav-link">Home</Link>
+              <Link href="/kyc" className="nav-link">KYC Verification</Link>
+              <Link href="/assets" className="nav-link">Asset Management</Link>
+              <Link href="/login" className="btn btn-primary">Login</Link>
             </div>
           </div>
         </div>
@@ -70,7 +70,7 @@ export default function Register() {
         <div className="container">
           <div className="max-w-md mx-auto">
             <div className="banking-card p-8">
-              <h2 className="text-2xl font-bold mb-6 text-center text-primary-dark">用户注册</h2>
+              <h2 className="text-2xl font-bold mb-6 text-center text-primary-dark">User Registration</h2>
               
               {error && (
                 <div className="alert alert-error mb-4">
@@ -80,7 +80,7 @@ export default function Register() {
               
               <form onSubmit={handleRegister}>
                 <div className="form-group mb-4">
-                  <label htmlFor="username" className="form-label">用户名</label>
+                  <label htmlFor="username" className="form-label">Username</label>
                   <input
                     type="text"
                     id="username"
@@ -92,7 +92,7 @@ export default function Register() {
                 </div>
                 
                 <div className="form-group mb-4">
-                  <label htmlFor="email" className="form-label">邮箱</label>
+                  <label htmlFor="email" className="form-label">Email</label>
                   <input
                     type="email"
                     id="email"
@@ -104,7 +104,7 @@ export default function Register() {
                 </div>
                 
                 <div className="form-group mb-4">
-                  <label htmlFor="password" className="form-label">密码</label>
+                  <label htmlFor="password" className="form-label">Password</label>
                   <input
                     type="password"
                     id="password"
@@ -117,7 +117,7 @@ export default function Register() {
                 </div>
                 
                 <div className="form-group mb-4">
-                  <label htmlFor="address" className="form-label">钱包地址</label>
+                  <label htmlFor="address" className="form-label">Wallet Address</label>
                   <input
                     type="text"
                     id="address"
@@ -125,22 +125,22 @@ export default function Register() {
                     value={address}
                     onChange={(e) => setAddress(e.target.value)}
                     required
-                    placeholder="0x开头的以太坊地址"
+                    placeholder="Ethereum address starting with 0x"
                   />
                 </div>
                 
                 <div className="form-group mb-6">
-                  <label htmlFor="role" className="form-label">角色</label>
+                  <label htmlFor="role" className="form-label">Role</label>
                   <select
                     id="role"
                     className="form-input"
                     value={role}
                     onChange={(e) => setRole(e.target.value)}
                   >
-                    <option value="investor">投资者 (Investor)</option>
-                    <option value="issuer">发行方 (Issuer)</option>
-                    <option value="custodian">托管方 (Custodian)</option>
-                    <option value="regulator">监管者 (Regulator)</option>
+                    <option value="investor">Investor</option>
+                    <option value="issuer">Issuer</option>
+                    <option value="custodian">Custodian</option>
+                    <option value="regulator">Regulator</option>
                   </select>
                 </div>
                 
@@ -149,12 +149,12 @@ export default function Register() {
                   className="btn btn-primary w-full" 
                   disabled={loading}
                 >
-                  {loading ? '注册中...' : '注册'}
+                  {loading ? 'Registering...' : 'Register'}
                 </button>
                 
                 <div className="text-center mt-4">
                   <p className="text-gray-color">
-                    已有账户？ <Link href="/login" className="text-primary-color hover:underline">立即登录</Link>
+                    Already have an account? <Link href="/login" className="text-primary-color hover:underline">Login now</Link>
                   </p>
                 </div>
               </form>
@@ -169,12 +169,12 @@ export default function Register() {
           <div className="footer-content">
             <div>
               <h3 className="text-xl font-bold mb-2">RWA Compliance Gateway</h3>
-              <p className="text-gray-color">连接现实世界资产与DeFi生态</p>
+              <p className="text-gray-color">Connecting real-world assets with DeFi ecosystem</p>
             </div>
             <div className="footer-links">
-              <Link href="/" className="footer-link">首页</Link>
-              <Link href="/kyc" className="footer-link">KYC验证</Link>
-              <Link href="/assets" className="footer-link">资产管理</Link>
+              <Link href="/" className="footer-link">Home</Link>
+              <Link href="/kyc" className="footer-link">KYC Verification</Link>
+              <Link href="/assets" className="footer-link">Asset Management</Link>
             </div>
           </div>
           <div className="footer-copyright">

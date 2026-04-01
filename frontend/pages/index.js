@@ -47,11 +47,11 @@ export default function Home() {
               <div className="nav-brand-name">RWA Compliance Gateway</div>
             </div>
             <div className="nav-links">
-              <Link href="/" className="nav-link active">首页</Link>
-              <Link href="/kyc" className="nav-link">KYC验证</Link>
-              <Link href="/assets" className="nav-link">资产管理</Link>
+              <Link href="/" className="nav-link active">Home</Link>
+              <Link href="/kyc" className="nav-link">KYC Verification</Link>
+              <Link href="/assets" className="nav-link">Asset Management</Link>
               {user && user.role === 'regulator' && (
-                <Link href="/compliance" className="nav-link">合规管理</Link>
+                <Link href="/compliance" className="nav-link">Compliance Management</Link>
               )}
               {user ? (
                 <>
@@ -67,13 +67,13 @@ export default function Home() {
                     }}
                     className="btn btn-outline"
                   >
-                    退出登录
+Logout
                   </button>
                 </>
               ) : (
                 <>
-                  <Link href="/login" className="btn btn-outline">登录</Link>
-                  <Link href="/register" className="btn btn-primary">注册</Link>
+                  <Link href="/login" className="btn btn-outline">Login</Link>
+                  <Link href="/register" className="btn btn-primary">Register</Link>
                 </>
               )}
             </div>
@@ -87,17 +87,17 @@ export default function Home() {
           <div className="max-w-4xl mx-auto text-center">
             <h1 className="text-4xl md:text-5xl font-bold mb-6">RWA Compliance Gateway</h1>
             <p className="text-xl mb-10 opacity-90">
-              连接现实世界资产与DeFi生态的合规准入网关
+              Compliance gateway connecting real-world assets with DeFi ecosystem
             </p>
             <p className="text-lg mb-12 opacity-80 max-w-2xl mx-auto">
-              构建合规、安全、透明的资产代币化解决方案，为机构资产上链提供一站式服务
+              Building compliant, secure, and transparent asset tokenization solutions, providing one-stop services for institutional asset onboarding
             </p>
             <div className="flex flex-col sm:flex-row justify-center gap-4">
               <Link href="/assets" className="btn" style={{ backgroundColor: 'white', color: 'var(--primary-color)', minWidth: '200px' }}>
-                开始资产代币化
+                Start Asset Tokenization
               </Link>
               <Link href="/kyc" className="btn btn-outline" style={{ borderColor: 'white', color: 'white', minWidth: '200px' }}>
-                完成KYC验证
+                Complete KYC Verification
               </Link>
             </div>
           </div>
@@ -107,38 +107,38 @@ export default function Home() {
       {/* 使用流程 */}
       <section className="py-16 bg-white">
         <div className="container">
-          <h2 className="text-3xl font-bold text-center mb-4 text-primary-dark">使用流程</h2>
+          <h2 className="text-3xl font-bold text-center mb-4 text-primary-dark">Usage Process</h2>
           <p className="text-gray-color text-center mb-12 max-w-2xl mx-auto">
-            按照以下步骤开始您的RWA资产代币化之旅
+            Follow these steps to start your RWA asset tokenization journey
           </p>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
             <div className="banking-card text-center">
               <div className="w-16 h-16 bg-primary-light bg-opacity-10 rounded-full flex items-center justify-center mx-auto mb-4">
                 <span className="text-2xl font-bold text-primary-color">1</span>
               </div>
-              <h3 className="text-xl font-semibold mb-2 text-primary-dark">完成KYC验证</h3>
-              <p className="text-gray-color">提交个人信息，完成身份验证，获得链上可验证凭证</p>
+              <h3 className="text-xl font-semibold mb-2 text-primary-dark">Complete KYC Verification</h3>
+              <p className="text-gray-color">Submit personal information, complete identity verification, and obtain on-chain verifiable credentials</p>
             </div>
             <div className="banking-card text-center">
               <div className="w-16 h-16 bg-primary-light bg-opacity-10 rounded-full flex items-center justify-center mx-auto mb-4">
                 <span className="text-2xl font-bold text-primary-color">2</span>
               </div>
-              <h3 className="text-xl font-semibold mb-2 text-primary-dark">连接钱包</h3>
-              <p className="text-gray-color">连接您的以太坊钱包，确保安全访问系统</p>
+              <h3 className="text-xl font-semibold mb-2 text-primary-dark">Connect Wallet</h3>
+              <p className="text-gray-color">Connect your Ethereum wallet to ensure secure access to the system</p>
             </div>
             <div className="banking-card text-center">
               <div className="w-16 h-16 bg-primary-light bg-opacity-10 rounded-full flex items-center justify-center mx-auto mb-4">
                 <span className="text-2xl font-bold text-primary-color">3</span>
               </div>
-              <h3 className="text-xl font-semibold mb-2 text-primary-dark">创建资产</h3>
-              <p className="text-gray-color">创建您的RWA资产，设置资产参数和合规规则</p>
+              <h3 className="text-xl font-semibold mb-2 text-primary-dark">Create Asset</h3>
+              <p className="text-gray-color">Create your RWA asset, set asset parameters and compliance rules</p>
             </div>
             <div className="banking-card text-center">
               <div className="w-16 h-16 bg-primary-light bg-opacity-10 rounded-full flex items-center justify-center mx-auto mb-4">
                 <span className="text-2xl font-bold text-primary-color">4</span>
               </div>
-              <h3 className="text-xl font-semibold mb-2 text-primary-dark">管理资产</h3>
-              <p className="text-gray-color">进行存款、赎回等操作，管理您的资产组合</p>
+              <h3 className="text-xl font-semibold mb-2 text-primary-dark">Manage Asset</h3>
+              <p className="text-gray-color">Perform deposit, redemption, and other operations to manage your asset portfolio</p>
             </div>
           </div>
         </div>
@@ -147,27 +147,27 @@ export default function Home() {
       {/* 核心功能 */}
       <section className="py-16 bg-gray-light">
         <div className="container">
-          <h2 className="text-3xl font-bold text-center mb-4 text-primary-dark">核心功能</h2>
+          <h2 className="text-3xl font-bold text-center mb-4 text-primary-dark">Core Features</h2>
           <p className="text-gray-color text-center mb-12 max-w-2xl mx-auto">
-            我们提供全面的RWA资产代币化解决方案
+            We provide comprehensive RWA asset tokenization solutions
           </p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <div className="banking-card">
-              <h3 className="text-xl font-semibold mb-3 text-primary-dark">身份与权限管理</h3>
+              <h3 className="text-xl font-semibold mb-3 text-primary-dark">Identity and Permission Management</h3>
               <p className="text-gray-color">
-                集成第三方KYC服务，为用户生成链上可验证凭证，实现基于角色的访问控制，确保合规性
+                Integrates third-party KYC services, generates on-chain verifiable credentials for users, implements role-based access control, and ensures compliance
               </p>
             </div>
             <div className="banking-card">
-              <h3 className="text-xl font-semibold mb-3 text-primary-dark">资产代币化引擎</h3>
+              <h3 className="text-xl font-semibold mb-3 text-primary-dark">Asset Tokenization Engine</h3>
               <p className="text-gray-color">
-                支持ERC-3643或ERC-1400标准，实现资产价值与链上代币的1:1锚定，确保资产安全
+                Supports ERC-3643 or ERC-1400 standards, implements 1:1 anchoring between asset value and on-chain tokens, ensuring asset security
               </p>
             </div>
             <div className="banking-card">
-              <h3 className="text-xl font-semibold mb-3 text-primary-dark">合规规则引擎</h3>
+              <h3 className="text-xl font-semibold mb-3 text-primary-dark">Compliance Rule Engine</h3>
               <p className="text-gray-color">
-                可编程限制，包括持有者数量上限、单一账户最大持仓限制、转账白名单强制校验
+                Programmable restrictions, including holder quantity limits, single account maximum holding limits, and mandatory transfer whitelist verification
               </p>
             </div>
           </div>
@@ -177,31 +177,31 @@ export default function Home() {
       {/* 安全保障 */}
       <section className="py-16 bg-white">
         <div className="container">
-          <h2 className="text-3xl font-bold text-center mb-4 text-primary-dark">安全保障</h2>
+          <h2 className="text-3xl font-bold text-center mb-4 text-primary-dark">Security Assurance</h2>
           <p className="text-gray-color text-center mb-12 max-w-2xl mx-auto">
-            我们采用多层次安全措施，确保您的资产安全
+            We adopt multi-layered security measures to ensure the safety of your assets
           </p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <div className="banking-card text-center">
               <div className="w-16 h-16 bg-secondary-light bg-opacity-10 rounded-full flex items-center justify-center mx-auto mb-4">
                 <span className="text-2xl font-bold text-secondary-color">🔒</span>
               </div>
-              <h3 className="text-xl font-semibold mb-2 text-primary-dark">智能合约安全</h3>
-              <p className="text-gray-color">经过多重审计的智能合约，确保资产交易安全</p>
+              <h3 className="text-xl font-semibold mb-2 text-primary-dark">Smart Contract Security</h3>
+              <p className="text-gray-color">Multi-audited smart contracts to ensure asset transaction security</p>
             </div>
             <div className="banking-card text-center">
               <div className="w-16 h-16 bg-info-light bg-opacity-10 rounded-full flex items-center justify-center mx-auto mb-4">
                 <span className="text-2xl font-bold text-info-color">🛡️</span>
               </div>
-              <h3 className="text-xl font-semibold mb-2 text-primary-dark">合规监控</h3>
-              <p className="text-gray-color">实时监控交易，确保符合监管要求</p>
+              <h3 className="text-xl font-semibold mb-2 text-primary-dark">Compliance Monitoring</h3>
+              <p className="text-gray-color">Real-time transaction monitoring to ensure regulatory compliance</p>
             </div>
             <div className="banking-card text-center">
               <div className="w-16 h-16 bg-warning-light bg-opacity-10 rounded-full flex items-center justify-center mx-auto mb-4">
                 <span className="text-2xl font-bold text-warning-color">📊</span>
               </div>
-              <h3 className="text-xl font-semibold mb-2 text-primary-dark">风险控制</h3>
-              <p className="text-gray-color">多层次风险控制机制，保障资产安全</p>
+              <h3 className="text-xl font-semibold mb-2 text-primary-dark">Risk Control</h3>
+              <p className="text-gray-color">Multi-layered risk control mechanisms to ensure asset security</p>
             </div>
           </div>
         </div>
@@ -213,12 +213,12 @@ export default function Home() {
           <div className="footer-content">
             <div>
               <h3 className="text-xl font-bold mb-2">RWA Compliance Gateway</h3>
-              <p className="text-gray-color">连接现实世界资产与DeFi生态</p>
+              <p className="text-gray-color">Connecting real-world assets with DeFi ecosystem</p>
             </div>
             <div className="footer-links">
-              <Link href="/" className="footer-link">首页</Link>
-              <Link href="/kyc" className="footer-link">KYC验证</Link>
-              <Link href="/assets" className="footer-link">资产管理</Link>
+              <Link href="/" className="footer-link">Home</Link>
+              <Link href="/kyc" className="footer-link">KYC Verification</Link>
+              <Link href="/assets" className="footer-link">Asset Management</Link>
             </div>
           </div>
           <div className="footer-copyright">

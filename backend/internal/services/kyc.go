@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"os"
 	"time"
+
+	"rwaGateway/internal/database"
 )
 
 // OnfidoAPI 结构体用于与Onfido API交互
@@ -203,7 +205,11 @@ func (api *OnfidoAPI) VerifyKYC(userAddress, verificationData string) (bool, str
 
 // IsKYCVerified 检查用户是否已经完成KYC验证
 func (api *OnfidoAPI) IsKYCVerified(userAddress string) (bool, error) {
-	// 测试模式：所有用户都通过KYC验证
-	// 在实际项目中，应该查询数据库或调用KYC服务来检查用户的验证状态
-	return true, nil
+	// 查询数据库中的KYC验证状态
+	verified, err := database.GetKYCVerified(userAddress)
+	if err != nil {
+		// 如果数据库中没有记录，返回false
+		return false, err
+	}
+	return verified, nil
 }

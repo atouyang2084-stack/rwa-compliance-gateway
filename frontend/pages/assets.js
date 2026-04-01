@@ -950,11 +950,11 @@ export default function Assets() {
               <div className="nav-brand-name">RWA Compliance Gateway</div>
             </div>
             <div className="nav-links">
-              <Link href="/" className="nav-link">首页</Link>
-              <Link href="/kyc" className="nav-link">KYC验证</Link>
-              <Link href="/assets" className="nav-link active">资产管理</Link>
+              <Link href="/" className="nav-link">Home</Link>
+              <Link href="/kyc" className="nav-link">KYC Verification</Link>
+              <Link href="/assets" className="nav-link active">Asset Management</Link>
               {user && user.role === 'regulator' && (
-                <Link href="/compliance" className="nav-link">合规管理</Link>
+                <Link href="/compliance" className="nav-link">Compliance Management</Link>
               )}
               {user ? (
                 <>
@@ -966,7 +966,7 @@ export default function Assets() {
                     onClick={connectWallet}
                     className="btn btn-primary"
                   >
-                    {account ? '重新连接钱包' : '连接钱包'}
+                    {account ? 'Reconnect Wallet' : 'Connect Wallet'}
                   </button>
                   <button 
                     onClick={() => {
@@ -978,13 +978,13 @@ export default function Assets() {
                     }}
                     className="btn btn-outline"
                   >
-                    退出登录
+                    Logout
                   </button>
                 </>
               ) : (
                 <>
-                  <Link href="/login" className="btn btn-outline">登录</Link>
-                  <Link href="/register" className="btn btn-primary">注册</Link>
+                  <Link href="/login" className="btn btn-outline">Login</Link>
+                  <Link href="/register" className="btn btn-primary">Register</Link>
                 </>
               )}
             </div>
@@ -996,21 +996,21 @@ export default function Assets() {
       <main className="container py-12">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-12">
-            <h1 className="text-3xl font-bold text-primary-dark mb-4">资产管理</h1>
-            <p className="text-gray-color">管理您的RWA资产，进行创建、存款和赎回操作</p>
+            <h1 className="text-3xl font-bold text-primary-dark mb-4">Asset Management</h1>
+            <p className="text-gray-color">Manage your RWA assets, including creation, deposit, and redemption operations</p>
             <div className="mt-4 flex justify-center items-center gap-4">
               <div className="bg-white p-4 rounded-lg shadow-md">
-                <label className="form-label mr-4">当前角色:</label>
-                <span className="text-primary-dark font-medium">{userRole === 'investor' ? '投资者' : userRole === 'issuer' ? '发行方' : userRole === 'custodian' ? '托管方' : '监管者'}</span>
+                <label className="form-label mr-4">Current Role:</label>
+                <span className="text-primary-dark font-medium">{userRole === 'investor' ? 'Investor' : userRole === 'issuer' ? 'Issuer' : userRole === 'custodian' ? 'Custodian' : 'Regulator'}</span>
               </div>
               <div className="bg-white p-4 rounded-lg shadow-md">
-                <label className="form-label mr-4">KYC状态:</label>
+                <label className="form-label mr-4">KYC Status:</label>
                 <span className={`font-medium ${isKYCVerified ? 'text-green-600' : 'text-red-600'}`}>
-                  {isKYCVerified ? '✓ 已验证' : '✗ 未验证'}
+                  {isKYCVerified ? '✓ Verified' : '✗ Not Verified'}
                 </span>
                 {!isKYCVerified && account && (
                   <Link href="/kyc" className="ml-4 text-primary hover:underline">
-                    去完成验证 →
+                    Complete Verification →
                   </Link>
                 )}
               </div>
@@ -1030,23 +1030,23 @@ export default function Assets() {
               <div className="banking-card">
                 <div className="card-header">
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                    <h2 className="card-title text-primary-dark">资产列表</h2>
+                    <h2 className="card-title text-primary-dark">Asset List</h2>
                     <button 
                       onClick={fetchAssets}
                       className="btn btn-primary w-full sm:w-auto"
                     >
-                      刷新列表
+                      Refresh List
                     </button>
                   </div>
                 </div>
                 {isLoading ? (
                   <div className="loading">
                     <div className="loading-spinner"></div>
-                    <p className="text-gray-color">加载中...</p>
+                    <p className="text-gray-color">Loading...</p>
                   </div>
                 ) : (
                   (() => {
-                    // 过滤出活跃的资产
+                    // Filter active assets
                     const activeAssets = assets.filter(asset => asset.isActive);
                     return activeAssets.length > 0 ? (
                       <ul className="space-y-3">
@@ -1062,7 +1062,7 @@ export default function Assets() {
                                 <div className="text-sm text-gray-color">{asset.symbol}</div>
                               </div>
                               <div className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${asset.isActive ? 'bg-secondary-light bg-opacity-20 text-secondary-dark' : 'bg-gray-color bg-opacity-20 text-gray-color'}`}>
-                                {asset.isActive ? '活跃' : '暂停'}
+                                {asset.isActive ? 'Active' : 'Inactive'}
                               </div>
                             </div>
                             <div className="mt-2 text-sm text-gray-color">
@@ -1080,8 +1080,8 @@ export default function Assets() {
                       </ul>
                     ) : (
                       <div className="empty-state">
-                        <p className="empty-state-title">暂无资产</p>
-                        <p className="empty-state-description">点击"创建资产"按钮开始</p>
+                        <p className="empty-state-title">No Assets</p>
+                        <p className="empty-state-description">Click "Create Asset" button to start</p>
                       </div>
                     );
                   })()
@@ -1093,28 +1093,28 @@ export default function Assets() {
             <div className="w-full md:w-3/4">
               <div className="banking-card">
                 <div className="card-header">
-                  <h2 className="card-title text-primary-dark">资产详情</h2>
+                  <h2 className="card-title text-primary-dark">Asset Details</h2>
                 </div>
                 {selectedAsset && selectedAsset.isActive ? (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
                       <div className="space-y-4">
                         <div>
-                          <h3 className="text-sm font-medium text-gray-color mb-1">资产名称</h3>
+                          <h3 className="text-sm font-medium text-gray-color mb-1">Asset Name</h3>
                           <p className="text-primary-dark font-medium">{selectedAsset.name}</p>
                         </div>
                         <div>
-                          <h3 className="text-sm font-medium text-gray-color mb-1">资产符号</h3>
+                          <h3 className="text-sm font-medium text-gray-color mb-1">Asset Symbol</h3>
                           <p className="text-primary-dark font-medium">{selectedAsset.symbol}</p>
                         </div>
                         <div>
-                          <h3 className="text-sm font-medium text-gray-color mb-1">资产ID</h3>
+                          <h3 className="text-sm font-medium text-gray-color mb-1">Asset ID</h3>
                           <p className="text-primary-dark font-medium">{selectedAsset.assetId}</p>
                         </div>
                         <div>
-                          <h3 className="text-sm font-medium text-gray-color mb-1">状态</h3>
+                          <h3 className="text-sm font-medium text-gray-color mb-1">Status</h3>
                           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${selectedAsset.isActive ? 'bg-secondary-light bg-opacity-20 text-secondary-dark' : 'bg-gray-color bg-opacity-20 text-gray-color'}`}>
-                            {selectedAsset.isActive ? '活跃' : '暂停'}
+                            {selectedAsset.isActive ? 'Active' : 'Inactive'}
                           </span>
                         </div>
                       </div>
@@ -1122,35 +1122,35 @@ export default function Assets() {
                     <div>
                       <div className="space-y-4">
                         <div>
-                          <h3 className="text-sm font-medium text-gray-color mb-1">总价值</h3>
+                          <h3 className="text-sm font-medium text-gray-color mb-1">Total Value</h3>
                           <p className="text-primary-dark font-medium">${selectedAsset.totalValue.toFixed(2)}</p>
                         </div>
                         <div>
-                          <h3 className="text-sm font-medium text-gray-color mb-1">代币数量</h3>
+                          <h3 className="text-sm font-medium text-gray-color mb-1">Total Tokens</h3>
                           <p className="text-primary-dark font-medium">{selectedAsset.totalTokens}</p>
                         </div>
                         <div>
-                          <h3 className="text-sm font-medium text-gray-color mb-1">已售出代币</h3>
+                          <h3 className="text-sm font-medium text-gray-color mb-1">Sold Tokens</h3>
                           <p className="text-primary-dark font-medium">{Math.min(assetTotalBalances[selectedAsset.assetId] || 0, selectedAsset.totalTokens)} 代币</p>
                         </div>
                         <div>
-                          <h3 className="text-sm font-medium text-gray-color mb-1">可购买代币</h3>
+                          <h3 className="text-sm font-medium text-gray-color mb-1">Available Tokens</h3>
                           <p className="text-primary-dark font-medium">{Math.max(0, selectedAsset.totalTokens - (assetTotalBalances[selectedAsset.assetId] || 0))} 代币</p>
                         </div>
                         <div>
-                          <h3 className="text-sm font-medium text-gray-color mb-1">代币价格</h3>
+                          <h3 className="text-sm font-medium text-gray-color mb-1">Token Price</h3>
                           <p className="text-primary-dark font-medium">${(Number(selectedAsset.totalValue) / Number(selectedAsset.totalTokens)).toFixed(2)}</p>
                         </div>
                         <div>
-                          <h3 className="text-sm font-medium text-gray-color mb-1">我的余额</h3>
+                          <h3 className="text-sm font-medium text-gray-color mb-1">My Balance</h3>
                           <p className="text-secondary-dark font-medium">{Math.min(userBalances[selectedAsset.assetId] || 0, selectedAsset.totalTokens)} 代币</p>
                         </div>
                         <div>
-                          <h3 className="text-sm font-medium text-gray-color mb-1">我的价值</h3>
+                          <h3 className="text-sm font-medium text-gray-color mb-1">My Value</h3>
                           <p className="text-secondary-dark font-medium">${(Math.min(userBalances[selectedAsset.assetId] || 0, selectedAsset.totalTokens) * Number(selectedAsset.totalValue) / Number(selectedAsset.totalTokens)).toFixed(2)}</p>
                         </div>
                         <div>
-                          <h3 className="text-sm font-medium text-gray-color mb-1">代币地址</h3>
+                          <h3 className="text-sm font-medium text-gray-color mb-1">Token Address</h3>
                           <p className="text-primary-dark font-medium break-all">{selectedAsset.tokenAddress}</p>
                         </div>
                       </div>
@@ -1158,23 +1158,23 @@ export default function Assets() {
                   </div>
                 ) : (
                   <div className="empty-state">
-                    <p className="empty-state-title">请从左侧选择一个资产查看详情</p>
-                    <p className="empty-state-description">点击资产列表中的资产项查看详细信息</p>
+                    <p className="empty-state-title">Please select an asset from the left to view details</p>
+                    <p className="empty-state-description">Click on an asset item in the asset list to view detailed information</p>
                   </div>
                 )}
               </div>
 
-              {/* 创建资产 - 仅发行方可见 */}
+              {/* Create Asset - Only visible to issuers */}
               {userRole === 'issuer' && (
                 <div className="banking-card">
                   <div className="card-header">
-                    <h2 className="card-title text-primary-dark">创建资产</h2>
+                    <h2 className="card-title text-primary-dark">Create Asset</h2>
                   </div>
                   <form onSubmit={handleCreateAsset}>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div className="form-group">
                         <label htmlFor="assetId" className="form-label">
-                          资产ID
+                          Asset ID
                         </label>
                         <input
                           type="text"
@@ -1184,12 +1184,12 @@ export default function Assets() {
                           onChange={(e) => handleInputChange(e, 'create')}
                           required
                           className="form-control"
-                          placeholder="例如: real-estate-001"
+                          placeholder="Example: real-estate-001"
                         />
                       </div>
                       <div className="form-group">
                         <label htmlFor="name" className="form-label">
-                          资产名称
+                          Asset Name
                         </label>
                         <input
                           type="text"
@@ -1199,12 +1199,12 @@ export default function Assets() {
                           onChange={(e) => handleInputChange(e, 'create')}
                           required
                           className="form-control"
-                          placeholder="例如: 商业地产"
+                          placeholder="Example: Commercial Real Estate"
                         />
                       </div>
                       <div className="form-group">
                         <label htmlFor="symbol" className="form-label">
-                          资产符号
+                          Asset Symbol
                         </label>
                         <input
                           type="text"
@@ -1214,12 +1214,12 @@ export default function Assets() {
                           onChange={(e) => handleInputChange(e, 'create')}
                           required
                           className="form-control"
-                          placeholder="例如: CRE"
+                          placeholder="Example: CRE"
                         />
                       </div>
                       <div className="form-group">
                         <label htmlFor="initialValue" className="form-label">
-                          初始价值（美元）
+                          Initial Value (USD)
                         </label>
                         <input
                           type="number"
@@ -1229,7 +1229,7 @@ export default function Assets() {
                           onChange={(e) => handleInputChange(e, 'create')}
                           required
                           className="form-control"
-                          placeholder="例如: 100000"
+                          placeholder="Example: 100000"
                         />
                       </div>
                     </div>
@@ -1238,22 +1238,22 @@ export default function Assets() {
                       disabled={isLoading}
                       className="btn btn-primary w-full mt-6"
                     >
-                      {isLoading ? '创建中...' : '创建资产'}
+                      {isLoading ? 'Creating...' : 'Create Asset'}
                     </button>
                   </form>
                 </div>
               )}
               
-              {/* 下架资产 - 仅发行方可见 */}
+              {/* Deactivate Asset - Only visible to issuers */}
               {userRole === 'issuer' && (
                 <div className="banking-card">
                   <div className="card-header">
-                    <h2 className="card-title text-primary-dark">下架资产</h2>
+                    <h2 className="card-title text-primary-dark">Deactivate Asset</h2>
                   </div>
                   <form onSubmit={handle下架}>
                     <div className="form-group">
                       <label htmlFor="下架AssetId" className="form-label">
-                        资产ID
+                        Asset ID
                       </label>
                       <input
                         type="text"
@@ -1263,7 +1263,7 @@ export default function Assets() {
                         onChange={(e) => handleInputChange(e, '下架')}
                         required
                         className="form-control"
-                        placeholder="输入要下架的资产ID"
+                        placeholder="Enter asset ID to deactivate"
                       />
                     </div>
                     <button
@@ -1271,22 +1271,22 @@ export default function Assets() {
                       disabled={isLoading}
                       className="btn btn-danger w-full mt-6"
                     >
-                      {isLoading ? '下架中...' : '下架资产'}
+                      {isLoading ? 'Deactivating...' : 'Deactivate Asset'}
                     </button>
                   </form>
                 </div>
               )}
 
-              {/* 存款 - 发行方和投资者可见 */}
+              {/* Deposit - Visible to issuers and investors */}
               {(userRole === 'issuer' || userRole === 'investor') && (
                 <div className="banking-card">
                   <div className="card-header">
-                    <h2 className="card-title text-primary-dark">存款</h2>
+                    <h2 className="card-title text-primary-dark">Deposit</h2>
                   </div>
                   <form onSubmit={handleDeposit}>
                     <div className="form-group">
                       <label htmlFor="depositAssetId" className="form-label">
-                        资产ID
+                        Asset ID
                       </label>
                       <input
                         type="text"
@@ -1296,12 +1296,12 @@ export default function Assets() {
                         onChange={(e) => handleInputChange(e, 'deposit')}
                         required
                         className="form-control"
-                        placeholder="输入资产ID"
+                        placeholder="Enter asset ID"
                       />
                     </div>
                     <div className="form-group">
                       <label htmlFor="depositValue" className="form-label">
-                        存款金额（美元）
+                        Deposit Amount (USD)
                       </label>
                       <input
                         type="number"
@@ -1311,7 +1311,7 @@ export default function Assets() {
                         onChange={(e) => handleInputChange(e, 'deposit')}
                         required
                         className="form-control"
-                        placeholder="输入存款金额"
+                        placeholder="Enter deposit amount"
                       />
                     </div>
 
@@ -1325,27 +1325,27 @@ export default function Assets() {
                       })()}
                       className="btn btn-secondary w-full"
                     >
-                      {isLoading ? '存款中...' : !isKYCVerified ? '请先完成KYC验证' : (() => {
+                      {isLoading ? 'Depositing...' : !isKYCVerified ? 'Please complete KYC verification first' : (() => {
                         const asset = assets.find(a => a.assetId === depositForm.assetId);
-                        if (!asset) return '存款';
+                        if (!asset) return 'Deposit';
                         const totalBalance = assetTotalBalances[depositForm.assetId] || 0;
-                        return totalBalance >= asset.totalTokens ? '已达到总供应量' : '存款';
+                        return totalBalance >= asset.totalTokens ? 'Reached total supply' : 'Deposit';
                       })()}
                     </button>
                   </form>
                 </div>
               )}
 
-              {/* 赎回 - 投资者和发行方可见 */}
+              {/* Redeem - Visible to investors and issuers */}
               {(userRole === 'investor' || userRole === 'issuer') && (
                 <div className="banking-card">
                   <div className="card-header">
-                    <h2 className="card-title text-primary-dark">赎回</h2>
+                    <h2 className="card-title text-primary-dark">Redeem</h2>
                   </div>
                   <form onSubmit={handleRedeem}>
                     <div className="form-group">
                       <label htmlFor="redeemAssetId" className="form-label">
-                        资产ID
+                        Asset ID
                       </label>
                       <input
                         type="text"
@@ -1355,12 +1355,12 @@ export default function Assets() {
                         onChange={(e) => handleInputChange(e, 'redeem')}
                         required
                         className="form-control"
-                        placeholder="输入资产ID"
+                        placeholder="Enter asset ID"
                       />
                     </div>
                     <div className="form-group">
                       <label htmlFor="redeemTokens" className="form-label">
-                        赎回代币数量
+                        Number of Tokens to Redeem
                       </label>
                       <input
                         type="number"
@@ -1370,7 +1370,7 @@ export default function Assets() {
                         onChange={(e) => handleInputChange(e, 'redeem')}
                         required
                         className="form-control"
-                        placeholder="输入赎回数量"
+                        placeholder="Enter redemption amount"
                       />
                     </div>
 
@@ -1379,22 +1379,22 @@ export default function Assets() {
                       disabled={isLoading}
                       className="btn btn-danger w-full"
                     >
-                      {isLoading ? '赎回中...' : '赎回'}
+                      {isLoading ? 'Redeeming...' : 'Redeem'}
                     </button>
                   </form>
                 </div>
               )}
 
-              {/* 转账 - 仅投资者可见 */}
+              {/* Transfer - Only visible to investors */}
               {userRole === 'investor' && (
                 <div className="banking-card">
                   <div className="card-header">
-                    <h2 className="card-title text-primary-dark">转账</h2>
+                    <h2 className="card-title text-primary-dark">Transfer</h2>
                   </div>
                   <form onSubmit={handleTransfer}>
                     <div className="form-group">
                       <label htmlFor="transferAssetId" className="form-label">
-                        资产ID
+                        Asset ID
                       </label>
                       <input
                         type="text"
@@ -1404,12 +1404,12 @@ export default function Assets() {
                         onChange={(e) => handleInputChange(e, 'transfer')}
                         required
                         className="form-control"
-                        placeholder="输入资产ID"
+                        placeholder="Enter asset ID"
                       />
                     </div>
                     <div className="form-group">
                       <label htmlFor="toAddress" className="form-label">
-                        接收地址
+                        Recipient Address
                       </label>
                       <input
                         type="text"
@@ -1419,12 +1419,12 @@ export default function Assets() {
                         onChange={(e) => handleInputChange(e, 'transfer')}
                         required
                         className="form-control"
-                        placeholder="输入接收地址"
+                        placeholder="Enter recipient address"
                       />
                     </div>
                     <div className="form-group">
                       <label htmlFor="amount" className="form-label">
-                        转账金额
+                        Transfer Amount
                       </label>
                       <input
                         type="number"
@@ -1434,7 +1434,7 @@ export default function Assets() {
                         onChange={(e) => handleInputChange(e, 'transfer')}
                         required
                         className="form-control"
-                        placeholder="输入转账金额"
+                        placeholder="Enter transfer amount"
                       />
                     </div>
                     <button
@@ -1442,7 +1442,7 @@ export default function Assets() {
                       disabled={isLoading || !isKYCVerified}
                       className="btn btn-primary w-full"
                     >
-                      {isLoading ? '转账中...' : !isKYCVerified ? '请先完成KYC验证' : '转账'}
+                      {isLoading ? 'Transferring...' : !isKYCVerified ? 'Please complete KYC verification first' : 'Transfer'}
                     </button>
                   </form>
                 </div>
@@ -1498,39 +1498,18 @@ export default function Assets() {
 
       {/* 底部 */}
       <footer className="footer">
-        <div className="container">
-          <div className="footer-content">
-            <div className="footer-brand">
-              <h3>RWA Compliance Gateway</h3>
-              <p>连接现实世界资产与DeFi生态的合规准入网关，为机构资产上链提供安全、合规的解决方案。</p>
-            </div>
-            <div className="footer-links">
-              <div className="footer-link-group">
-                <h4>快速链接</h4>
-                <ul className="footer-link-list">
-                  <li><Link href="/" className="footer-link">首页</Link></li>
-                  <li><Link href="/kyc" className="footer-link">KYC验证</Link></li>
-                  <li><Link href="/assets" className="footer-link">资产管理</Link></li>
-                </ul>
-              </div>
-              <div className="footer-link-group">
-                <h4>资源</h4>
-                <ul className="footer-link-list">
-                  <li><a href="#" className="footer-link">文档</a></li>
-                  <li><a href="#" className="footer-link">API参考</a></li>
-                  <li><a href="#" className="footer-link">常见问题</a></li>
-                </ul>
-              </div>
-              <div className="footer-link-group">
-                <h4>联系我们</h4>
-                <ul className="footer-link-list">
-                  <li><a href="#" className="footer-link">支持</a></li>
-                  <li><a href="#" className="footer-link">合作伙伴</a></li>
-                  <li><a href="#" className="footer-link">关于我们</a></li>
-                </ul>
-              </div>
-            </div>
+      <div className="container">
+        <div className="footer-content">
+          <div>
+            <h3 className="text-xl font-bold mb-2">RWA Compliance Gateway</h3>
+            <p className="text-gray-color">Connecting real-world assets with DeFi ecosystem</p>
           </div>
+          <div className="footer-links">
+            <Link href="/" className="footer-link">Home</Link>
+            <Link href="/kyc" className="footer-link">KYC Verification</Link>
+            <Link href="/assets" className="footer-link">Asset Management</Link>
+          </div>
+        </div>
           <div className="footer-copyright">
             © 2026 RWA Compliance Gateway. All rights reserved.
           </div>

@@ -1,6 +1,6 @@
-// 安全工具函数
+// Security utility functions
 
-// XSS防护：HTML转义
+// XSS protection: HTML escape
 export function escapeHtml(text) {
   if (typeof text !== 'string') {
     return text;
@@ -13,7 +13,7 @@ export function escapeHtml(text) {
     .replace(/'/g, '&#039;');
 }
 
-// XSS防护：JavaScript转义
+// XSS protection: JavaScript escape
 export function escapeJs(text) {
   if (typeof text !== 'string') {
     return text;
@@ -27,7 +27,7 @@ export function escapeJs(text) {
     .replace(/\t/g, '\\t');
 }
 
-// 输入验证：验证地址格式
+// Input validation: Validate address format
 export function isValidAddress(address) {
   if (!address || typeof address !== 'string') {
     return false;
@@ -35,7 +35,7 @@ export function isValidAddress(address) {
   return /^0x[a-fA-F0-9]{40}$/.test(address);
 }
 
-// 输入验证：验证邮箱格式
+// Input validation: Validate email format
 export function isValidEmail(email) {
   if (!email || typeof email !== 'string') {
     return false;
@@ -43,7 +43,7 @@ export function isValidEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
-// 输入验证：验证资产ID格式
+// Input validation: Validate asset ID format
 export function isValidAssetId(assetId) {
   if (!assetId || typeof assetId !== 'string') {
     return false;
@@ -51,13 +51,13 @@ export function isValidAssetId(assetId) {
   return /^[a-zA-Z0-9-_]{1,64}$/.test(assetId);
 }
 
-// 输入验证：验证数字范围
+// Input validation: Validate number range
 export function isValidNumber(value, min = 0, max = Number.MAX_SAFE_INTEGER) {
   const num = Number(value);
   return !isNaN(num) && num >= min && num <= max;
 }
 
-// 输入验证：清理输入
+// Input validation: Sanitize input
 export function sanitizeInput(input) {
   if (typeof input !== 'string') {
     return input;
@@ -65,7 +65,7 @@ export function sanitizeInput(input) {
   return input.trim().replace(/[<>]/g, '');
 }
 
-// 验证以太坊交易哈希格式
+// Validate Ethereum transaction hash format
 export function isValidTxHash(txHash) {
   if (!txHash || typeof txHash !== 'string') {
     return false;
@@ -73,7 +73,7 @@ export function isValidTxHash(txHash) {
   return /^0x[a-fA-F0-9]{64}$/.test(txHash);
 }
 
-// 验证URL格式
+// Validate URL format
 export function isValidUrl(url) {
   if (!url || typeof url !== 'string') {
     return false;
@@ -86,7 +86,7 @@ export function isValidUrl(url) {
   }
 }
 
-// 格式化地址（隐藏中间部分）
+// Format address (hide middle part)
 export function formatAddress(address, start = 6, end = 4) {
   if (!address || typeof address !== 'string') {
     return '';
@@ -97,7 +97,7 @@ export function formatAddress(address, start = 6, end = 4) {
   return `${address.substring(0, start)}...${address.substring(address.length - end)}`;
 }
 
-// 验证JSON字符串
+// Validate JSON string
 export function isValidJson(str) {
   if (typeof str !== 'string') {
     return false;
@@ -110,7 +110,7 @@ export function isValidJson(str) {
   }
 }
 
-// 安全地解析JSON
+// Safely parse JSON
 export function safeJsonParse(str, defaultValue = null) {
   try {
     return JSON.parse(str);
@@ -119,13 +119,13 @@ export function safeJsonParse(str, defaultValue = null) {
   }
 }
 
-// 验证金额格式
+// Validate amount format
 export function isValidAmount(amount) {
   const num = Number(amount);
   return !isNaN(num) && num > 0 && num <= Number.MAX_SAFE_INTEGER;
 }
 
-// 验证日期格式
+// Validate date format
 export function isValidDate(dateStr) {
   if (!dateStr || typeof dateStr !== 'string') {
     return false;
@@ -134,12 +134,12 @@ export function isValidDate(dateStr) {
   return date instanceof Date && !isNaN(date.getTime());
 }
 
-// 防止重放攻击：生成随机数
+// Prevent replay attacks: Generate nonce
 export function generateNonce() {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
 }
 
-// 防止重放攻击：验证时间戳
+// Prevent replay attacks: Validate timestamp
 export function isValidTimestamp(timestamp, maxAge = 300000) {
   const ts = Number(timestamp);
   return !isNaN(ts) && Math.abs(Date.now() - ts) <= maxAge;

@@ -1,7 +1,7 @@
-// 智能合约配置
+// Smart contract configuration
 import { ethers } from 'ethers'
 
-// 合约地址（Sepolia测试网）
+// Contract addresses (Sepolia testnet)
 export const contractAddresses = {
   complianceEngine: '0xcd2d48Dd1B02e9499B7Ca8a8BfAF7E9CD7Ee47FE',
   oracleManager: '0x6804CAc6d1162321A9451f65275C8A2124AEDeFb',
@@ -9,7 +9,7 @@ export const contractAddresses = {
   rwaToken: '0x8221201A5c1c62bDfB0431beAD8843931f2A72aE'
 }
 
-// 简化的ABI（实际项目中应该从artifacts中导入完整ABI）
+// Simplified ABI (in production, should import full ABI from artifacts)
 export const complianceEngineABI = [
   {
     "inputs": [
@@ -135,12 +135,12 @@ export const rwaTokenABI = [
   }
 ]
 
-// 获取合约实例
+// Get contract instance
 export const getContract = (address, abi, provider) => {
   return new ethers.Contract(address, abi, provider)
 }
 
-// 获取签名者
+// Get signer
 export const getSigner = async (provider) => {
   if (!provider) return null
   try {

@@ -1,6 +1,6 @@
-// CSRF保护工具
+// CSRF protection utilities
 
-// 生成CSRF令牌
+// Generate CSRF token
 export function generateCsrfToken() {
   const array = new Uint8Array(32);
   if (typeof window !== 'undefined' && window.crypto && window.crypto.getRandomValues) {
@@ -13,7 +13,7 @@ export function generateCsrfToken() {
   return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
 }
 
-// 存储CSRF令牌
+// Store CSRF token
 let csrfToken = null;
 
 export function setCsrfToken(token) {
@@ -24,14 +24,14 @@ export function getCsrfToken() {
   return csrfToken;
 }
 
-// 获取请求头中的CSRF令牌
+// Get CSRF token for request headers
 export function getCsrfHeader() {
   return {
     'X-CSRF-Token': csrfToken || ''
   };
 }
 
-// 验证CSRF令牌（简单实现）
+// Verify CSRF token (simple implementation)
 export function verifyCsrfToken(token) {
   if (!token || !csrfToken) {
     return false;
@@ -39,7 +39,7 @@ export function verifyCsrfToken(token) {
   return token === csrfToken;
 }
 
-// 在页面加载时生成令牌
+// Generate token on page load
 if (typeof window !== 'undefined') {
   setCsrfToken(generateCsrfToken());
 }
