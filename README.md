@@ -1,653 +1,313 @@
 # RWA Compliance Gateway
 
-## 项目概述
+一个面向 RWA 数字资产发行、合规准入和风险控制的全栈 MVP。项目包含
+Next.js 前端、Go API、SQLite 原子账本，以及 ERC-3643-aligned Solidity
+合约套件，可用于完整展示身份验证、资产创建、申购、转账、赎回、冻结与审计流程。
 
-RWA Compliance Gateway是一个连接链下现实世界资产(RWA)与链上DeFi生态的合规准入网关。它解决了机构资产上链时的身份校验(KYC)、洗钱防范(AML)以及跨司法管辖区的合规自动执行问题。
+> 当前版本适合本地演示、技术验证和安全评审，不代表已经获得 ERC-3643
+> 认证，也不应直接承载真实资金或真实世界资产。
 
-### 核心价值
-- **合规验证**：集成第三方KYC服务，为用户生成链上可验证凭证
-- **风险控制**：实时同步制裁名单，自动拦截风险地址
-- **权限管理**：基于角色的访问控制，区分资产发行方、投资者、托管方和监管者
-- **资产代币化**：支持ERC-3643或ERC-1400标准，实现资产价值与链上代币的1:1锚定
-- **合规规则**：可编程限制，包括持有者数量上限、单一账户最大持仓限制、转账白名单强制校验
+## 当前能力
 
-## 技术架构
+- JWT 身份认证，公开注册固定为 `investor`，防止客户端自助提权
+- 后端按 `issuer`、`custodian`、`regulator`、`admin` 执行权威角色校验
+- 钱包地址与登录账户绑定，KYC 和资产操作不信任客户端提交的发送方地址
+- KYC、制裁名单、司法管辖区和地址合规状态检查
+- 全链路最小单位整数字符串金额，前端使用 `BigInt`，后端限制在 `uint256`
+- 原子余额变更、请求 Nonce 防重放和 SHA-256 前向哈希审计链
+- 按 Token 隔离的 KYC、黑名单、白名单、持仓上限和持有人数量控制
+- Hardhat 合约部署与防御性测试
 
-### 层级结构
+## 架构
 
-| 层级 | 技术栈 | 职责描述 |
-|------|--------|----------|
-| 应用层(Frontend) | Next.js | 提供机构端后台与投资者Dashboard（暂时移除了RainbowKit依赖） |
-| 接入层(Gateway) | Go | 处理API请求、签名转发、交易预检查 |
-| 合规层(Middleware) | 自定义服务 | 链下合规数据证明转换，保护用户隐私 |
-| 合约层(Blockchain) | Solidity (Ethereum/Polygon) | 核心业务逻辑、权限控制、资产发行 |
-| 数据层(Storage) | SQLite (开发环境) | 资产数据持久化存储 |
-| 数据层(Indexing) | 自定义服务 | 检索链上资产流转记录及合规日志 |
-
-## 项目结构
-
-```
-rwaGateway/
-├── backend/               # Go后端项目
-│   ├── api/              # API路由和处理器
-│   ├── config/           # 配置管理
-│   ├── internal/         # 内部服务和中间件
-│   │   ├── database/     # 数据库操作
-│   │   ├── handlers/     # 请求处理器
-│   │   ├── middleware/   # 中间件
-│   │   └── services/     # 业务服务
-│   ├── pkg/              # 公共包
-│   │   └── utils/        # 工具函数
-│   ├── main.go           # 后端入口文件
-│   ├── go.mod            # Go模块配置
-│   └── rwa_gateway.db    # SQLite数据库文件
-├── frontend/              # Next.js前端项目
-│   ├── app/              # App Router页面
-│   ├── components/       # 组件
-│   ├── lib/              # 工具库
-│   ├── pages/            # 页面
-│   ├── public/           # 静态资源
-│   ├── package.json      # 前端依赖配置
-│   └── next.config.js    # Next.js配置
-├── contracts/             # 智能合约
-│   ├── ComplianceRegistry.sol  # 合规注册表接口
-│   ├── ComplianceEngine.sol    # 合规引擎实现
-│   ├── OracleManager.sol       # 预言机管理器
-│   ├── AssetManager.sol        # 资产管理
-│   └── RWAToken.sol            # ERC-3643代币合约
-├── .env.example          # 环境变量示例
-├── .gitignore            # Git忽略文件
-└── README.md             # 项目文档
+```mermaid
+flowchart LR
+    U["Browser + Wallet"] --> F["Next.js Frontend"]
+    F -->|"JWT / integer unit strings"| B["Go Compliance API"]
+    B --> A["Auth + RBAC"]
+    B --> C["KYC / Sanctions / Jurisdiction"]
+    B --> L["SQLite Atomic Ledger"]
+    L --> H["Hash-chained Audit Log"]
+    B -. "Optional KYC hash anchoring" .-> E["ComplianceEngine"]
+    F -. "Configured contract addresses" .-> M["AssetManager"]
+    M --> T["RWAToken"]
+    M --> O["OracleManager"]
+    T --> E
 ```
 
-## 核心功能模块
+项目提供两个明确区分的执行面：
 
-### 1. 身份与权限管理 (DID & Role-based Access Control)
-- **合规验证**：集成第三方KYC服务，为用户生成链上可验证凭证(VC)
-- **黑名单机制**：实时同步制裁名单（如OFAC），自动拦截风险地址
-- **角色定义**：区分资产发行方(Issuer)、投资者(Investor)、托管方(Custodian)和监管者(Regulator)
+1. 后端 `ledger://` 账本用于无需外部链的确定性 Showcase。
+2. Solidity 合约用于展示链上权限发行、合规转账、冻结、增发和赎回。
 
-### 2. 资产代币化引擎 (Tokenization Engine)
-- **标准支持**：支持ERC-3643（带有合规功能的代币标准）或ERC-1400
-- **资产挂钩**：实现现实资产价值与链上代币的1:1锚定逻辑及预言机(Oracle)喂价
+## 核心目录
 
-### 3. 合规规则引擎 (Compliance Rule Engine)
-- **可编程限制**：
-  - 持有者数量上限限制
-  - 单一账户最大持仓限制
-  - 转账白名单强制校验
+```text
+backend/
+  api/                         HTTP 路由、中间件和安全处理器
+  internal/amount/             uint256 兼容金额解析
+  internal/database/           SQLite 账本、合规数据和审计链
+  internal/services/           认证、KYC、制裁检查和链上锚定
+contracts/
+  ComplianceEngine.sol         身份、角色、辖区、名单和转账规则
+  ComplianceRegistry.sol       合规接口与枚举
+  RWAToken.sol                 2 位小数的许可型代币
+  AssetManager.sol             资产生命周期和价值/供应量锚定
+  OracleManager.sol            受控估值数据
+frontend/
+  lib/amounts.js               BigInt 金额转换与显示
+  lib/contracts.js             ABI 和环境驱动的合约地址
+  pages/                       登录、KYC、资产和监管页面
+test/contracts/                Hardhat 防御性测试
+```
 
-## 核心交互流程
+更详细的模块边界与生产上线门槛见
+[PHASE4_REFACTOR_BLUEPRINT.md](./PHASE4_REFACTOR_BLUEPRINT.md)。
 
-### 资产上链流程
-1. 资产发行方提交线下证明
-2. 网关审核
-3. 触发合约mint()
-4. 代币发送至合规托管地址
+## 环境要求
 
-### 交易拦截流程
-1. 用户A发起转账
-2. 合约调用isVerify()
-3. 校验A与B是否均在白名单且未超过限额
-4. 执行/拒绝
+- Node.js 18+
+- npm 9+
+- Go 1.24+
+- 支持 CGO 的 C 编译环境，用于 `go-sqlite3`
+- MetaMask 或兼容 EIP-1193 钱包，用于前端钱包绑定展示
+- 可选：`sqlite3` CLI，用于本地演示角色引导
+
+## 快速启动
+
+### 1. 安装依赖
+
+```bash
+npm install
+cd frontend
+npm install
+cd ../backend
+go mod download
+```
+
+### 2. 配置本地环境
+
+```bash
+cd backend
+cp .env.example .env
+```
+
+至少修改：
+
+```env
+JWT_SECRET=<strong-random-secret>
+KYC_MODE=demo
+SANCTIONS_MODE=demo
+DATABASE_URL=./rwa_gateway.db
+PORT=8081
+ALLOWED_ORIGIN=http://localhost:3000
+```
+
+前端配置：
+
+```bash
+cd ../frontend
+cp .env.example .env.local
+```
+
+默认 API 地址为：
+
+```env
+NEXT_PUBLIC_API_URL=http://localhost:8081/v1
+```
+
+### 3. 启动后端
+
+```bash
+cd backend
+go run .
+```
+
+健康检查：
+
+```bash
+curl http://localhost:8081/v1/health
+```
+
+### 4. 启动前端
+
+```bash
+cd frontend
+npm run dev
+```
+
+访问 [http://localhost:3000](http://localhost:3000)。
+
+## Showcase 流程
+
+### 投资者流程
+
+1. 使用钱包地址注册，公共注册结果始终为 `investor`。
+2. 登录后连接相同钱包地址。
+3. 在 KYC 页面提交 Demo KYC 数据。
+4. 对已经创建的资产执行申购、转账或赎回。
+5. 在资产审计页查看事件哈希与 `integrityVerified`。
+
+### 本地发行方/监管者引导
+
+生产系统必须通过受审计的管理员工作流授予特权角色。本地 Showcase
+可在用户完成注册后直接修改本地 SQLite 数据库：
+
+```bash
+cd backend
+sqlite3 rwa_gateway.db \
+  "UPDATE users SET role='issuer' WHERE username='demo_issuer';"
+
+sqlite3 rwa_gateway.db \
+  "UPDATE users SET role='regulator' WHERE username='demo_regulator';"
+```
+
+角色变更后重新登录以签发包含新角色的 JWT。不要在生产环境使用数据库直改方式。
+
+## 金额模型
+
+资产默认使用 2 位小数。所有 API 金额字段均为已经缩放的十进制整数字符串：
+
+```text
+12.34 asset units -> "1234" smallest units
+```
+
+禁止向后端发送 `12.34`、JavaScript `number` 或科学计数法。前端
+`frontend/lib/amounts.js` 负责将用户输入转换为 `BigInt` 单位；后端拒绝负数、
+小数、零值和超过 `uint256` 的金额。
+
+## 关键 API
+
+除注册、登录和健康检查外，以下接口均要求：
+
+```http
+Authorization: Bearer <jwt>
+```
+
+| 方法 | 路径 | 角色/条件 |
+|---|---|---|
+| POST | `/v1/auth/register` | Public，固定创建 investor |
+| POST | `/v1/auth/login` | Public |
+| POST | `/v1/compliance/verify` | Authenticated，使用 JWT 钱包地址 |
+| GET | `/v1/compliance/status` | Authenticated |
+| GET/POST | `/v1/compliance/sanction-list` | Regulator |
+| POST | `/v1/compliance/jurisdiction` | Regulator |
+| PUT | `/v1/compliance/jurisdiction/restrict` | Regulator |
+| POST | `/v1/assets/create` | Issuer |
+| POST | `/v1/assets/deposit` | Authenticated + KYC + sanctions check |
+| POST | `/v1/assets/redeem` | Authenticated + KYC + sanctions check |
+| POST | `/v1/assets/transfer` | Sender/recipient KYC + sanctions check |
+| POST | `/v1/assets/freeze` | Custodian or Regulator |
+| POST | `/v1/assets/unfreeze` | Custodian or Regulator |
+| POST | `/v1/assets/deactivate` | Regulator |
+| GET | `/v1/assets/audit-trail?assetId=...` | Authenticated |
+
+资产写操作示例：
+
+```json
+{
+  "assetId": "demo-asset-1",
+  "amountUnits": "1250",
+  "toAddress": "0x2222222222222222222222222222222222222222",
+  "nonce": "transfer-20260610-001"
+}
+```
+
+发送方地址由 JWT 推导，客户端传入的 `fromAddress` 不参与授权。
 
 ## 智能合约
 
-### ComplianceRegistry.sol
-核心合规合约接口，包含以下功能：
-- KYC验证相关函数
-- 黑名单管理
-- 角色管理
-- 资产管理
-- 合规规则检查
+### 本地测试
 
-详细接口定义请参考 `contracts/ComplianceRegistry.sol` 文件。
-
-### ComplianceEngine.sol
-合规引擎实现，实现了ComplianceRegistry接口的所有功能，包括：
-- KYC验证和管理
-- 黑名单管理
-- 基于角色的访问控制
-- 资产管理和状态更新
-- 白名单管理
-- 合规规则检查
-
-### OracleManager.sol
-预言机管理器，用于管理资产价格：
-- 设置和获取资产价格
-- 计算资产价值
-- 检查价格是否过期
-
-### AssetManager.sol
-资产管理合约，实现了资产的创建、存款、赎回等功能：
-- 创建新资产
-- 存款（增加资产价值并铸造代币）
-- 赎回（销毁代币并释放资产价值）
-- 更新资产价值
-- 暂停和恢复资产
-
-### RWAToken.sol
-ERC-3643合规代币合约，支持：
-- 基于角色的访问控制
-- 合规检查
-- 代币铸造和销毁
-- 转账限制
-
-## API接口
-
-### 核心API端点
-
-| 方法 | 路径 | 功能描述 |
-|------|------|----------|
-| POST | /v1/compliance/verify | 提交KYC资料并返回链上证明 |
-| GET | /v1/compliance/sanction-list | 获取制裁名单 |
-| POST | /v1/compliance/sync-sanction-list | 同步制裁名单 |
-| POST | /v1/compliance/jurisdiction | 添加司法管辖区 |
-| PUT | /v1/compliance/jurisdiction/restrict | 限制司法管辖区 |
-| POST | /v1/compliance/address-jurisdiction | 设置地址司法管辖区 |
-| GET | /v1/compliance/address-jurisdiction | 获取地址司法管辖区 |
-| GET | /v1/assets/audit-trail | 获取指定资产的完整合规审计追踪 |
-| GET | /v1/assets/list | 获取所有资产列表 |
-| GET | /v1/assets/details | 获取指定资产详情 |
-| POST | /v1/assets/create | 创建新资产 |
-| POST | /v1/assets/deposit | 存款（增加资产价值并铸造代币） |
-| POST | /v1/assets/redeem | 赎回（销毁代币并释放资产价值） |
-| POST | /v1/assets/transfer | 转账（在用户之间转移代币） |
-| POST | /v1/assets/freeze | 冻结资产 |
-| POST | /v1/assets/unfreeze | 解冻资产 |
-| GET | /v1/health | 健康检查 |
-
-### 请求与响应示例
-
-#### POST /v1/compliance/verify
-
-**请求体**：
-```json
-{
-  "userAddress": "0x1234567890123456789012345678901234567890",
-  "verificationData": "{\"name\": \"John Doe\", \"id\": \"123456789\"}"
-}
+```bash
+npm test
 ```
 
-**响应**：
-```json
-{
-  "success": true,
-  "verificationId": "KYC-123456",
-  "userId": "0x1234567890123456789012345678901234567890",
-  "message": "KYC verification successful"
-}
+当前防御性测试覆盖：
+
+- 非授权 KYC、角色、铸币和持有人状态写入
+- 未注册 Token 绕过和跨 Token 状态污染
+- 黑名单、KYC、白名单、暂停和账户持仓上限
+- 2 位小数最小单位、Allowance 与精确余额
+- 资产创建、估值/供应量同步、申购、转账、赎回和冻结
+
+### 本地部署
+
+```bash
+npx hardhat run scripts/deploy.js --network hardhat
 ```
 
-#### GET /v1/assets/audit-trail
+脚本会部署并配置：
 
-**查询参数**：
-- assetId: 资产ID
+- `ComplianceEngine`
+- `OracleManager`
+- `AssetManager`
+- Demo `RWAToken`
 
-**响应**：
-```json
-{
-  "assetId": "asset-123",
-  "auditTrail": [
-    {
-      "timestamp": "2024-01-01T00:00:00Z",
-      "action": "Asset Created",
-      "actor": "0x1234567890123456789012345678901234567890",
-      "details": "Initial asset creation"
-    },
-    {
-      "timestamp": "2024-01-02T10:00:00Z",
-      "action": "KYC Verified",
-      "actor": "0x0987654321098765432109876543210987654321",
-      "details": "User KYC verification completed"
-    }
-  ]
-}
+### Sepolia
+
+根目录 `.env` 示例：
+
+```env
+SEPOLIA_URL=<rpc-url>
+PRIVATE_KEY=<dedicated-deployer-private-key>
+ETHERSCAN_API_KEY=<optional>
 ```
 
-#### GET /v1/assets/list
-
-**响应**：
-```json
-{
-  "success": true,
-  "assets": [
-    {
-      "assetId": "test-asset-1",
-      "name": "Test Asset 1",
-      "symbol": "TA1",
-      "totalValue": 100000,
-      "totalTokens": 100000,
-      "tokenAddress": "0x8221201A5c1c62bDfB0431beAD8843931f2A72aE",
-      "isActive": true
-    }
-  ]
-}
+```bash
+npm run deploy:sepolia
 ```
 
-#### GET /v1/assets/details
+不要提交私钥，也不要将资金托管密钥作为 KYC 锚定或部署账户。
 
-**查询参数**：
-- assetId: 资产ID
+## 可选链上 KYC 哈希锚定
 
-**响应**：
-```json
-{
-  "success": true,
-  "asset": {
-    "assetId": "test-asset-1",
-    "name": "Test Asset 1",
-    "symbol": "TA1",
-    "totalValue": 100000,
-    "totalTokens": 100000,
-    "tokenAddress": "0x8221201A5c1c62bDfB0431beAD8843931f2A72aE",
-    "isActive": true
-  }
-}
+后端配置以下变量后，会使用专用 Relayer 对 `setKYCDataHash` 发起真实签名交易：
+
+```env
+RPC_URL=<rpc-url>
+ANCHOR_PRIVATE_KEY=<dedicated-relayer-private-key>
+COMPLIANCE_ENGINE_ADDRESS=<deployed-address>
 ```
 
-#### POST /v1/assets/create
+未配置时，本地 Demo KYC 仍可完成，但不会伪造链上交易成功。
 
-**请求体**：
-```json
-{
-  "assetId": "test-asset-1",
-  "name": "Test Asset 1",
-  "symbol": "TA1",
-  "initialValue": 100000,
-  "complianceRegistry": "0x1234567890123456789012345678901234567890"
-}
+## 验证
+
+```bash
+cd backend
+GOCACHE=/tmp/rwa-go-cache go test ./...
+GOCACHE=/tmp/rwa-go-cache go vet ./...
+
+cd ..
+npm test
+npx hardhat run scripts/deploy.js --network hardhat
+
+cd frontend
+npm run build
 ```
 
-**响应**：
-```json
-{
-  "success": true,
-  "assetId": "test-asset-1",
-  "name": "Test Asset 1",
-  "symbol": "TA1",
-  "initialValue": 100000,
-  "message": "Asset created successfully"
-}
-```
+截至 2026-06-10：
 
-#### POST /v1/assets/deposit
+- Go 测试与 `go vet` 通过
+- Hardhat：10 个合约测试通过
+- Hardhat 本地完整部署通过
+- Next.js 生产构建通过
+- 注册页桌面与 390 x 844 移动端响应式检查通过
 
-**请求体**：
-```json
-{
-  "assetId": "test-asset-1",
-  "value": 25000
-}
-```
+## 安全与生产边界
 
-**响应**：
-```json
-{
-  "success": true,
-  "assetId": "test-asset-1",
-  "value": 25000,
-  "message": "Deposit successful"
-}
-```
+生产上线前至少需要：
 
-#### POST /v1/assets/redeem
+1. 使用 SIWE challenge/response 替代仅账户密码与钱包地址绑定。
+2. 接入持牌 KYC 和制裁筛查供应商，禁止 `demo` 模式。
+3. 使用 HSM/KMS 托管 JWT、Relayer 和部署密钥。
+4. 完成标准 ERC-3643 互操作评审和独立智能合约审计。
+5. 完成应用渗透测试、数据库备份、日志留存和 SIEM 导出。
+6. 建立受审计的角色授予、双人复核和紧急响应流程。
 
-**请求体**：
-```json
-{
-  "assetId": "test-asset-1",
-  "tokens": 10000
-}
-```
+详见 [security_audit_report.md](./security_audit_report.md)。
 
-**响应**：
-```json
-{
-  "success": true,
-  "assetId": "test-asset-1",
-  "tokens": 10000,
-  "message": "Redeem successful"
-}
-```
+## License
 
-#### POST /v1/assets/transfer
-
-**请求体**：
-```json
-{
-  "assetId": "test-asset-1",
-  "fromAddress": "0x1234567890123456789012345678901234567890",
-  "toAddress": "0x0987654321098765432109876543210987654321",
-  "amount": 1000
-}
-```
-
-**响应**：
-```json
-{
-  "success": true,
-  "assetId": "test-asset-1",
-  "from": "0x1234567890123456789012345678901234567890",
-  "to": "0x0987654321098765432109876543210987654321",
-  "amount": 1000,
-  "message": "Transfer successful"
-}
-```
-
-#### POST /v1/assets/freeze
-
-**请求体**：
-```json
-{
-  "assetId": "test-asset-1"
-}
-```
-
-**响应**：
-```json
-{
-  "success": true,
-  "assetId": "test-asset-1",
-  "message": "Asset frozen successfully"
-}
-```
-
-#### POST /v1/assets/unfreeze
-
-**请求体**：
-```json
-{
-  "assetId": "test-asset-1"
-}
-```
-
-**响应**：
-```json
-{
-  "success": true,
-  "assetId": "test-asset-1",
-  "message": "Asset unfrozen successfully"
-}
-```
-
-#### GET /v1/compliance/sanction-list
-
-**响应**：
-```json
-{
-  "success": true,
-  "sanctionedAddresses": [
-    "0x1234567890123456789012345678901234567890",
-    "0x0987654321098765432109876543210987654321",
-    "0xabcdef1234567890abcdef1234567890abcdef12"
-  ]
-}
-```
-
-#### POST /v1/compliance/sync-sanction-list
-
-**响应**：
-```json
-{
-  "success": true,
-  "message": "Sanction list synced successfully",
-  "sanctionedAddresses": [
-    "0x1234567890123456789012345678901234567890",
-    "0x0987654321098765432109876543210987654321",
-    "0xabcdef1234567890abcdef1234567890abcdef12"
-  ]
-}
-```
-
-#### POST /v1/compliance/jurisdiction
-
-**请求体**：
-```json
-{
-  "jurisdiction": "UK"
-}
-```
-
-**响应**：
-```json
-{
-  "success": true,
-  "message": "Jurisdiction added successfully",
-  "jurisdiction": "UK"
-}
-```
-
-#### PUT /v1/compliance/jurisdiction/restrict
-
-**请求体**：
-```json
-{
-  "jurisdiction": "CN",
-  "restricted": true
-}
-```
-
-**响应**：
-```json
-{
-  "success": true,
-  "message": "Jurisdiction restriction updated successfully",
-  "jurisdiction": "CN",
-  "restricted": true
-}
-```
-
-#### POST /v1/compliance/address-jurisdiction
-
-**请求体**：
-```json
-{
-  "address": "0x1111111111111111111111111111111111111111",
-  "jurisdiction": "US"
-}
-```
-
-**响应**：
-```json
-{
-  "success": true,
-  "message": "Address jurisdiction set successfully",
-  "address": "0x1111111111111111111111111111111111111111",
-  "jurisdiction": "US"
-}
-```
-
-#### GET /v1/compliance/address-jurisdiction
-
-**查询参数**：
-- address: 钱包地址
-
-**响应**：
-```json
-{
-  "success": true,
-  "address": "0x1111111111111111111111111111111111111111",
-  "jurisdiction": "US"
-}
-```
-
-## 安装与运行
-
-### 后端安装
-
-1. 进入后端目录：
-   ```bash
-   cd backend
-   ```
-
-2. 安装依赖：
-   ```bash
-   go mod download
-   ```
-
-3. 复制环境变量文件并配置：
-   ```bash
-   cp ../.env.example .env
-   # 编辑.env文件，填写相关配置
-   ```
-
-4. 运行后端服务：
-   ```bash
-   go run main.go
-   ```
-
-### 前端安装
-
-1. 进入前端目录：
-   ```bash
-   cd frontend
-   ```
-
-2. 安装依赖：
-   ```bash
-   npm install
-   ```
-
-3. 复制环境变量文件并配置：
-   ```bash
-   cp ../.env.example .env.local
-   # 编辑.env.local文件，填写相关配置
-   ```
-
-4. 运行前端开发服务器：
-   ```bash
-   npm run dev
-   ```
-
-### 前端改进
-
-- **商业网站风格**：采用成熟的商业网站设计，页面布局清晰，按钮明显，使用顺畅
-- **基于角色的访问控制**：根据用户角色（投资者、发行方、托管方、监管者）显示不同的界面和操作
-- **钱包连接要求**：在执行任何操作前，用户必须先连接钱包
-- **API代理配置**：使用Next.js的API代理功能，避免CORS问题
-- **用户体验优化**：未连接钱包时显示友好的提示信息，而不是网络错误
-
-## 配置说明
-
-环境变量配置文件 `.env.example` 包含以下主要配置项：
-
-- **后端服务配置**：端口、环境等
-- **区块链配置**：RPC URL、链ID等
-- **智能合约地址**：合规注册表合约地址
-- **KYC服务配置**：API密钥、端点等
-- **黑名单服务配置**：OFAC API密钥等
-- **身份验证配置**：JWT密钥等
-- **安全配置**：HSM密钥ID、MPC配置等
-- **断路器配置**：启用状态、阈值等
-- **预言机配置**：API密钥、端点等
-
-## 安全性要求
-
-- **密钥管理**：机构私钥需托管于物理HSM或使用MPC(多方计算)签名
-- **多重签名**：涉及资产敏感操作（如冻结、增发）必须经过m/n多签
-- **断路器机制**：当合规服务宕机时，网关应能自动暂停高风险交易
-
-## 开发指南
-
-### 代码规范
-- **Go代码**：遵循Go语言标准规范
-- **前端代码**：遵循Next.js和React最佳实践
-- **智能合约**：遵循Solidity最佳实践和安全规范
-
-### 测试
-- 后端API测试：使用Go测试框架
-- 前端测试：使用Jest和React Testing Library
-- 智能合约测试：使用Hardhat或Truffle
-- 系统集成测试：使用Node.js测试脚本
-
-### 系统集成测试
-
-#### 运行系统集成测试
-1. 进入测试目录：
-   ```bash
-   cd test
-   ```
-
-2. 安装依赖：
-   ```bash
-   npm install
-   ```
-
-3. 启动后端服务：
-   ```bash
-   cd ../backend && go run main.go
-   ```
-
-4. 运行测试脚本：
-   ```bash
-   cd ../test && node system_integration_test.js
-   ```
-
-#### 测试内容
-- 健康检查API
-- KYC验证流程
-- 资产创建、存款、赎回功能
-- 资产列表和详情查询
-- 资产审计追踪API
-- 前端服务状态
-
-## 系统要求
-
-- **后端**：Go 1.26.1+
-- **前端**：Node.js 18.0+
-- **智能合约**：Solidity 0.8.20+
-- **测试**：Node.js 18.0+
-
-### 部署
-- 后端：容器化部署，支持Kubernetes
-- 前端：静态部署到CDN
-- 智能合约：多链部署，支持Ethereum和Polygon
-
-## 后续计划
-
-1. **功能实现**：
-   - ✅ 完成KYC服务集成
-   - ✅ 实现资产代币化逻辑
-   - ✅ 开发合规规则引擎
-   - ✅ 实现固定代币总量的资产交易逻辑
-   - ✅ 修复React hydration error问题
-
-2. **安全审计**：
-   - ✅ 智能合约安全审计
-   - ✅ API安全测试
-   - ✅ 渗透测试
-
-3. **性能优化**：
-   - API响应速度优化
-   - 合约Gas费用优化
-   - 前端加载速度优化
-
-4. **扩展功能**：
-   - 支持更多区块链网络
-   - 集成更多KYC服务提供商
-   - 开发移动端应用
-
-5. **生态建设**：
-   - 建立开发者文档
-   - 开发SDK和API客户端
-   - 构建合作伙伴生态
-
-## 贡献指南
-
-欢迎社区贡献！请按照以下步骤：
-
-1. Fork项目
-2. 创建功能分支
-3. 提交更改
-4. 发起Pull Request
-
-## 联系方式
-
-- 项目维护者：[Wong壁虎]
-- 邮箱：[atouyang@163.com]
-- 仓库地址：[https://github.com/atouyang2084-stack/rwa-compliance-gateway]
-
----
-
-**注意**：本文档将随着项目的进展不断更新，敬请关注。
+MIT

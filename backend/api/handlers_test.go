@@ -5,219 +5,182 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
+	"reflect"
+	"strings"
 	"testing"
 
-	"rwaGateway/internal/database"
-
 	"github.com/gin-gonic/gin"
-	"github.com/stretchr/testify/assert"
+
+	"rwaGateway/internal/database"
 )
 
-// 重置nonceStore，用于测试
-func resetNonceStore() {
-	nonceMutex.Lock()
-	defer nonceMutex.Unlock()
-	nonceStore = make(map[string]bool)
+var require = struct {
+	NoError  func(*testing.T, error)
+	Equal    func(*testing.T, any, any, ...any)
+	Contains func(*testing.T, string, string)
+}{
+	NoError: func(t *testing.T, err error) {
+		t.Helper()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	},
+	Equal: func(t *testing.T, expected, actual any, message ...any) {
+		t.Helper()
+		if !reflect.DeepEqual(expected, actual) {
+			t.Fatalf("expected %#v, got %#v: %v", expected, actual, message)
+		}
+	},
+	Contains: func(t *testing.T, value, substring string) {
+		t.Helper()
+		if !strings.Contains(value, substring) {
+			t.Fatalf("expected %q to contain %q", value, substring)
+		}
+	},
 }
 
-// 测试超额购买场景
-func TestDepositAsset_ExceedTotalSupply(t *testing.T) {
-	// 重置nonceStore
-	resetNonceStore()
-	
-	// 初始化数据库
-	database.InitDatabase("./test.db")
-	defer database.Close()
+const (
+	aliceAddress   = "0x1111111111111111111111111111111111111111"
+	bobAddress     = "0x2222222222222222222222222222222222222222"
+	malloryAddress = "0x3333333333333333333333333333333333333333"
+)
 
-	// 创建测试资产 - 使用更大的代币总量以便测试
-	asset := database.Asset{
-		AssetID:      "test-asset-1",
-		Name:         "Test Asset",
-		Symbol:       "TA1",
-		TotalValue:   1000000, // 10000美元
-		TotalTokens:  10000,   // 10000代币
-		TokenAddress: "0x8221201A5c1c62bDfB0431beAD8843931f2A72aE",
-		IsActive:     true,
+func setupTestDatabase(t *testing.T) {
+	t.Helper()
+	if database.DB != nil {
+		_ = database.Close()
 	}
-	database.CreateAsset(asset)
-
-	// 创建测试用户
-	userAddress := "0x1111111111111111111111111111111111111111"
-
-	// 设置路由
-	r := gin.Default()
-	r.POST("/api/assets/deposit", DepositAsset)
-
-	// 构造请求体 - 第一次存入
-	requestBody := map[string]interface{}{
-		"assetId":     "test-asset-1",
-		"value":       500000, // 5000美元
-		"userAddress": userAddress,
-		"nonce":       "123456", // 添加nonce参数
-	}
-	body, _ := json.Marshal(requestBody)
-
-	// 创建请求
-	req, _ := http.NewRequest("POST", "/api/assets/deposit", bytes.NewBuffer(body))
-	req.Header.Set("Content-Type", "application/json")
-
-	// 记录响应
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	// 验证响应 - 第一次应该成功
-	if w.Code == http.StatusOK {
-		t.Log("第一次存款成功")
-	} else {
-		t.Logf("第一次存款失败: %s", w.Body.String())
-	}
-
-	// 再次尝试存入，应该失败
-	requestBody["nonce"] = "654321" // 更改nonce参数
-	requestBody["value"] = 600000   // 增加金额以确保超过剩余额度
-	body2, _ := json.Marshal(requestBody)
-	req2, _ := http.NewRequest("POST", "/api/assets/deposit", bytes.NewBuffer(body2))
-	req2.Header.Set("Content-Type", "application/json")
-
-	w2 := httptest.NewRecorder()
-	r.ServeHTTP(w2, req2)
-
-	// 这里应该失败，因为已经超过了总供应量
-	assert.Equal(t, http.StatusBadRequest, w2.Code)
-	t.Log("测试通过：当前代码已防止超额购买")
+	require.NoError(t, database.InitDatabase(filepath.Join(t.TempDir(), "gateway.db")))
+	t.Cleanup(func() { _ = database.Close() })
 }
 
-// 测试未授权转账场景
-func TestTransferAsset_Unauthorized(t *testing.T) {
-	// 重置nonceStore
-	resetNonceStore()
-	
-	// 初始化数据库
-	database.InitDatabase("./test.db")
-	defer database.Close()
-
-	// 创建测试资产
-	asset := database.Asset{
-		AssetID:      "test-asset-2",
-		Name:         "Test Asset 2",
-		Symbol:       "TA2",
-		TotalValue:   100000, // 1000美元
-		TotalTokens:  1000,   // 1000代币
-		TokenAddress: "0x8221201A5c1c62bDfB0431beAD8843931f2A72aE",
-		IsActive:     true,
-	}
-	database.CreateAsset(asset)
-
-	// 创建测试用户
-	senderAddress := "0x1111111111111111111111111111111111111111"
-	receiverAddress := "0x2222222222222222222222222222222222222222"
-
-	// 给发送者添加余额
-	database.UpdateUserAssetBalance(senderAddress, "test-asset-2", 500)
-
-	// 设置路由
-	r := gin.Default()
-	r.POST("/api/assets/transfer", TransferAsset)
-
-	// 构造请求体 - 尝试转账
-	requestBody := map[string]interface{}{
-		"assetId":     "test-asset-2",
-		"fromAddress": senderAddress,
-		"toAddress":   receiverAddress,
-		"amount":      100,
-		"nonce":       "123456", // 添加nonce参数
-	}
-	body, _ := json.Marshal(requestBody)
-
-	// 创建请求
-	req, _ := http.NewRequest("POST", "/api/assets/transfer", bytes.NewBuffer(body))
-	req.Header.Set("Content-Type", "application/json")
-
-	// 记录响应
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	// 验证响应 - 由于我们的IsKYCVerified方法总是返回true，所以转账会成功
-	// 在实际项目中，这里应该根据用户的实际KYC状态来判断
-	assert.Equal(t, http.StatusOK, w.Code)
-	t.Log("测试通过：当前代码已实现KYC验证")
+func createVerifiedUser(t *testing.T, username, address string) {
+	t.Helper()
+	require.NoError(t, database.CreateUser(username, username+"@example.com", "hash", address, "investor"))
+	require.NoError(t, database.UpdateKYCVerified(address, true))
 }
 
-// 测试重复提交请求场景
-func TestTransferAsset_DuplicateRequest(t *testing.T) {
-	// 重置nonceStore
-	resetNonceStore()
-	
-	// 初始化数据库
-	database.InitDatabase("./test.db")
-	defer database.Close()
+func contextRouter(role, address string) *gin.Engine {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		c.Set("role", role)
+		c.Set("address", address)
+		c.Next()
+	})
+	return router
+}
 
-	// 创建测试资产
-	asset := database.Asset{
-		AssetID:      "test-asset-3",
-		Name:         "Test Asset 3",
-		Symbol:       "TA3",
-		TotalValue:   100000, // 1000美元
-		TotalTokens:  1000,   // 1000代币
-		TokenAddress: "0x8221201A5c1c62bDfB0431beAD8843931f2A72aE",
-		IsActive:     true,
+func performJSON(router http.Handler, method, path string, body map[string]any) *httptest.ResponseRecorder {
+	payload, _ := json.Marshal(body)
+	request := httptest.NewRequest(method, path, bytes.NewReader(payload))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	return response
+}
+
+func TestRequireRolesRejectsInvestorOnIssuerRoute(t *testing.T) {
+	router := contextRouter("investor", aliceAddress)
+	router.POST("/issuer", RequireRoles("issuer"), func(c *gin.Context) {
+		c.Status(http.StatusNoContent)
+	})
+	response := performJSON(router, http.MethodPost, "/issuer", map[string]any{})
+	require.Equal(t, http.StatusForbidden, response.Code)
+}
+
+func TestTransferUsesAuthenticatedActorAndNonceIsAtomic(t *testing.T) {
+	setupTestDatabase(t)
+	createVerifiedUser(t, "alice", aliceAddress)
+	createVerifiedUser(t, "bob", bobAddress)
+	createVerifiedUser(t, "mallory", malloryAddress)
+	require.NoError(t, database.CreateAsset(aliceAddress, "create-asset-1", database.Asset{
+		AssetID: "asset-1", Name: "Demo Asset", Symbol: "DA",
+		TotalValueUnits: "100000", TotalTokenUnits: "100000",
+		TokenAddress: "0x4444444444444444444444444444444444444444", IsActive: true,
+	}))
+	require.NoError(t, database.DepositUnits(aliceAddress, "asset-1", "50000", "seed-alice"))
+
+	router := contextRouter("investor", aliceAddress)
+	router.POST("/transfer", TransferAssetSecure)
+	body := map[string]any{
+		"assetId": "asset-1", "fromAddress": malloryAddress,
+		"toAddress": bobAddress, "amountUnits": "1250", "nonce": "transfer-1",
 	}
-	database.CreateAsset(asset)
+	first := performJSON(router, http.MethodPost, "/transfer", body)
+	require.Equal(t, http.StatusOK, first.Code, first.Body.String())
 
-	// 创建测试用户
-	senderAddress := "0x1111111111111111111111111111111111111111"
-	receiverAddress := "0x2222222222222222222222222222222222222222"
+	alice, err := database.UnitBalance(aliceAddress, "asset-1")
+	require.NoError(t, err)
+	bob, err := database.UnitBalance(bobAddress, "asset-1")
+	require.NoError(t, err)
+	mallory, err := database.UnitBalance(malloryAddress, "asset-1")
+	require.NoError(t, err)
+	require.Equal(t, "48750", alice)
+	require.Equal(t, "1250", bob)
+	require.Equal(t, "0", mallory)
 
-	// 给发送者添加余额
-	database.UpdateUserAssetBalance(senderAddress, "test-asset-3", 500)
+	second := performJSON(router, http.MethodPost, "/transfer", body)
+	require.Equal(t, http.StatusConflict, second.Code)
+	aliceAfter, _ := database.UnitBalance(aliceAddress, "asset-1")
+	bobAfter, _ := database.UnitBalance(bobAddress, "asset-1")
+	require.Equal(t, alice, aliceAfter)
+	require.Equal(t, bob, bobAfter)
 
-	// 设置路由
-	r := gin.Default()
-	r.POST("/api/assets/transfer", TransferAsset)
+	verified, err := database.VerifyUnitAuditChain("asset-1")
+	require.NoError(t, err)
+	require.Equal(t, true, verified)
+	logs, err := database.UnitAuditLogs("asset-1")
+	require.NoError(t, err)
+	require.Equal(t, 3, len(logs))
+	require.Equal(t, "transfer-1", logs[0].RequestNonce)
+	require.Equal(t, 64, len(logs[0].EventHash))
+}
 
-	// 构造请求体
-	requestBody := map[string]interface{}{
-		"assetId":     "test-asset-3",
-		"fromAddress": senderAddress,
-		"toAddress":   receiverAddress,
-		"amount":      100,
-		"nonce":       "123456", // 添加nonce参数
+func TestAuditChainDetectsTampering(t *testing.T) {
+	setupTestDatabase(t)
+	createVerifiedUser(t, "alice", aliceAddress)
+	require.NoError(t, database.CreateAsset(aliceAddress, "create-audit", database.Asset{
+		AssetID: "audit-asset", Name: "Audit Asset", Symbol: "AUD",
+		TotalValueUnits: "1000", TotalTokenUnits: "1000",
+		TokenAddress: "ledger://audit-asset", IsActive: true,
+	}))
+	verified, err := database.VerifyUnitAuditChain("audit-asset")
+	require.NoError(t, err)
+	require.Equal(t, true, verified)
+
+	_, err = database.DB.Exec(
+		"UPDATE audit_unit_logs SET details = ? WHERE asset_id = ?",
+		"tampered", "audit-asset",
+	)
+	require.NoError(t, err)
+	verified, err = database.VerifyUnitAuditChain("audit-asset")
+	require.NoError(t, err)
+	require.Equal(t, false, verified)
+}
+
+func TestDepositRejectsFloatAndUint256Overflow(t *testing.T) {
+	setupTestDatabase(t)
+	createVerifiedUser(t, "alice", aliceAddress)
+	require.NoError(t, database.CreateAsset(aliceAddress, "create-asset-2", database.Asset{
+		AssetID: "asset-1", Name: "Demo Asset", Symbol: "DA",
+		TotalValueUnits: "100000", TotalTokenUnits: "100000",
+		TokenAddress: "0x4444444444444444444444444444444444444444", IsActive: true,
+	}))
+
+	router := contextRouter("investor", aliceAddress)
+	router.POST("/deposit", DepositAssetSecure)
+	for index, value := range []string{
+		"1.25",
+		"115792089237316195423570985008687907853269984665640564039457584007913129639936",
+	} {
+		response := performJSON(router, http.MethodPost, "/deposit", map[string]any{
+			"assetId": "asset-1", "valueUnits": value, "nonce": "bad-" + string(rune('a'+index)),
+		})
+		require.Equal(t, http.StatusBadRequest, response.Code, response.Body.String())
 	}
-	body, _ := json.Marshal(requestBody)
-
-	// 第一次请求
-	req1, _ := http.NewRequest("POST", "/api/assets/transfer", bytes.NewBuffer(body))
-	req1.Header.Set("Content-Type", "application/json")
-
-	w1 := httptest.NewRecorder()
-	r.ServeHTTP(w1, req1)
-
-	// 验证第一次请求是否成功
-	assert.Equal(t, http.StatusOK, w1.Code)
-	
-	// 检查第一次转账后的余额
-	senderBalance1, _ := database.GetUserAssetBalance(senderAddress, "test-asset-3")
-	receiverBalance1, _ := database.GetUserAssetBalance(receiverAddress, "test-asset-3")
-	t.Logf("第一次转账后 - 发送者余额: %d, 接收者余额: %d", senderBalance1, receiverBalance1)
-
-	// 第二次请求（使用相同的nonce，应该失败）
-	req2, _ := http.NewRequest("POST", "/api/assets/transfer", bytes.NewBuffer(body))
-	req2.Header.Set("Content-Type", "application/json")
-
-	w2 := httptest.NewRecorder()
-	r.ServeHTTP(w2, req2)
-
-	// 验证响应 - 由于使用了相同的nonce，应该失败
-	assert.Equal(t, http.StatusBadRequest, w2.Code)
-	
-	// 检查第二次转账后的余额 - 应该没有变化
-	senderBalance2, _ := database.GetUserAssetBalance(senderAddress, "test-asset-3")
-	receiverBalance2, _ := database.GetUserAssetBalance(receiverAddress, "test-asset-3")
-	t.Logf("第二次转账后 - 发送者余额: %d, 接收者余额: %d", senderBalance2, receiverBalance2)
-
-	// 验证余额应该只扣除一次
-	assert.Equal(t, senderBalance1, senderBalance2, "发送者余额不应该改变")
-	assert.Equal(t, receiverBalance1, receiverBalance2, "接收者余额不应该改变")
-
-	t.Log("测试通过：当前代码已防止重复提交请求")
+	balance, err := database.UnitBalance(aliceAddress, "asset-1")
+	require.NoError(t, err)
+	require.Equal(t, "0", balance)
 }

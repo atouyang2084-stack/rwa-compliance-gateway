@@ -2,11 +2,25 @@ package api
 
 import (
 	"net/http"
+	"os"
+	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
 	"rwaGateway/internal/services"
+)
+
+type rateWindow struct {
+	start time.Time
+	count int
+}
+
+var (
+	rateLimitMu      sync.Mutex
+	rateLimitWindows = make(map[string]rateWindow)
 )
 
 // AuthMiddleware 身份验证中间件
@@ -29,7 +43,7 @@ func AuthMiddleware() gin.HandlerFunc {
 		}
 
 		token := parts[1]
-		
+
 		// 验证token有效性
 		authService := services.NewAuthService()
 		claims, err := authService.ValidateToken(token)
@@ -52,75 +66,64 @@ func AuthMiddleware() gin.HandlerFunc {
 
 // RoleMiddleware 角色授权中间件
 func RoleMiddleware(requiredRole string) gin.HandlerFunc {
+	return RequireRoles(requiredRole)
+}
+
+// RequireRoles authorizes from claims already verified by AuthMiddleware.
+func RequireRoles(allowedRoles ...string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// 从请求头获取Authorization
-		authHeader := c.GetHeader("Authorization")
-		if authHeader == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Authorization header is required"})
+		roleValue, exists := c.Get("role")
+		userRole, ok := roleValue.(string)
+		if !exists || !ok || userRole == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Authenticated role is required"})
 			c.Abort()
 			return
 		}
 
-		// 检查Bearer token
-		parts := strings.SplitN(authHeader, " ", 2)
-		if !(len(parts) == 2 && parts[0] == "Bearer") {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Authorization header format must be Bearer {token}"})
-			c.Abort()
+		if userRole == "admin" {
+			c.Next()
 			return
 		}
-
-		token := parts[1]
-		
-		// 验证token并获取角色
-		authService := services.NewAuthService()
-		userRole, err := authService.GetUserRoleFromToken(token)
-		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
-			c.Abort()
-			return
-		}
-
-		// 角色权限映射
-		rolePermissions := map[string][]string{
-			"investor":   {"investor", "user"},
-			"issuer":     {"issuer", "investor", "user"},
-			"custodian":  {"custodian", "user"},
-			"regulator":  {"regulator", "user"},
-			"admin":      {"admin", "regulator", "custodian", "issuer", "investor", "user"},
-		}
-
-		// 检查用户是否有足够的权限
-		allowedRoles, exists := rolePermissions[userRole]
-		if !exists {
-			c.JSON(http.StatusForbidden, gin.H{"error": "Insufficient permissions"})
-			c.Abort()
-			return
-		}
-
-		// 检查是否包含所需角色
-		hasPermission := false
-		for _, role := range allowedRoles {
-			if role == requiredRole {
-				hasPermission = true
-				break
+		for _, allowedRole := range allowedRoles {
+			if userRole == allowedRole {
+				c.Next()
+				return
 			}
 		}
 
-		if !hasPermission {
-			c.JSON(http.StatusForbidden, gin.H{"error": "Insufficient permissions"})
-			c.Abort()
-			return
-		}
-
-		c.Next()
+		c.JSON(http.StatusForbidden, gin.H{"error": "Insufficient permissions"})
+		c.Abort()
 	}
 }
 
 // RateLimitMiddleware API速率限制中间件
 func RateLimitMiddleware() gin.HandlerFunc {
-	// 这里应该实现速率限制逻辑
-	// 暂时简单返回
+	limit := 120
+	if configured, err := strconv.Atoi(os.Getenv("RATE_LIMIT_PER_MINUTE")); err == nil && configured > 0 {
+		limit = configured
+	}
 	return func(c *gin.Context) {
+		now := time.Now()
+		key := c.ClientIP()
+		rateLimitMu.Lock()
+		window := rateLimitWindows[key]
+		if window.start.IsZero() || now.Sub(window.start) >= time.Minute {
+			window = rateWindow{start: now}
+		}
+		window.count++
+		rateLimitWindows[key] = window
+		rateLimitMu.Unlock()
+
+		if window.count > limit {
+			retryAfter := int(time.Until(window.start.Add(time.Minute)).Seconds())
+			if retryAfter < 1 {
+				retryAfter = 1
+			}
+			c.Header("Retry-After", strconv.Itoa(retryAfter))
+			c.JSON(http.StatusTooManyRequests, gin.H{"error": "Rate limit exceeded"})
+			c.Abort()
+			return
+		}
 		c.Next()
 	}
 }
@@ -128,7 +131,14 @@ func RateLimitMiddleware() gin.HandlerFunc {
 // CORS中间件
 func CORSMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		allowedOrigin := os.Getenv("ALLOWED_ORIGIN")
+		if allowedOrigin == "" {
+			allowedOrigin = "http://localhost:3000"
+		}
+		if c.GetHeader("Origin") == allowedOrigin {
+			c.Writer.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
+			c.Writer.Header().Set("Vary", "Origin")
+		}
 		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With, X-User-Role")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")

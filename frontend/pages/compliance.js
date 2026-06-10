@@ -208,45 +208,6 @@ export default function Compliance() {
     }
   }
 
-  const handleSyncSanctionList = async () => {
-    const token = localStorage.getItem('token')
-    if (!token) {
-      setMessage('请先登录')
-      setStatus('error')
-      return
-    }
-    
-    setIsLoading(true)
-    setMessage('')
-    
-    try {
-      const response = await fetch('/api/compliance/sync-sanction-list', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'X-User-Role': userRole
-        }
-      })
-      
-      if (!response.ok) {
-        const data = await response.json()
-        setMessage(`同步制裁名单失败: ${data.error}`)
-        setStatus('error')
-        return
-      }
-      
-      const data = await response.json()
-      setMessage('制裁名单同步成功！')
-      setStatus('success')
-      setSanctionedAddresses(data.sanctionedAddresses)
-    } catch (error) {
-      setMessage('网络错误，请稍后重试')
-      setStatus('error')
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
   const handleGetSanctionList = async () => {
     const token = localStorage.getItem('token')
     if (!token) {
@@ -483,11 +444,11 @@ export default function Compliance() {
                 <h3 className="text-lg font-medium text-primary-dark mb-4">Sanction List Operations</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <button
-                    onClick={handleSyncSanctionList}
+                    onClick={handleGetSanctionList}
                     disabled={isLoading}
                     className="btn btn-primary w-full py-3"
                   >
-                    {isLoading ? 'Syncing...' : 'Sync Sanction List'}
+                    {isLoading ? 'Refreshing...' : 'Refresh Sanction List'}
                   </button>
                   <button
                     onClick={handleGetSanctionList}

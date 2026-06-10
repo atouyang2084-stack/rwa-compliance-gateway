@@ -2,7 +2,14 @@ import Head from 'next/head'
 import Link from 'next/link'
 import { useState, useEffect } from 'react'
 import { ethers } from 'ethers'
-import { contractAddresses, assetManagerABI, getContract, getSigner } from '../lib/contracts'
+import {
+  availableUnits,
+  decimalToUnits,
+  formatUnits,
+  minUnits,
+  proportionalUnits,
+  unitPrice
+} from '../lib/amounts'
 
 export default function Assets() {
   const [account, setAccount] = useState(null)
@@ -171,6 +178,12 @@ export default function Assets() {
     setAccount(null)
   }
 
+  const requireBoundWallet = () => {
+    if (!account || !user?.address || account.toLowerCase() !== user.address.toLowerCase()) {
+      throw new Error('连接钱包必须与登录账户地址一致')
+    }
+  }
+
   const fetchUserBalances = async () => {
     // 检查是否已登录
     if (typeof window === 'undefined') {
@@ -190,7 +203,7 @@ export default function Assets() {
     
     try {
       // 使用相对路径，通过Next.js代理
-      const response = await fetch(`/api/assets/balances?userAddress=${userAddress}`, {
+      const response = await fetch('/api/assets/balances', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'X-User-Role': userRole
@@ -210,7 +223,7 @@ export default function Assets() {
       // 将余额转换为以资产ID为键的对象
       const balancesMap = {}
       data.balances.forEach(balance => {
-        balancesMap[balance.assetId] = balance.balance
+        balancesMap[balance.assetId] = balance.balanceUnits
       })
       setUserBalances(balancesMap)
     } catch (error) {
@@ -242,8 +255,8 @@ export default function Assets() {
         if (response.ok) {
           const data = await response.json()
           const totalBalancesMap = { ...assetTotalBalances }
-          totalBalancesMap[selectedAsset.assetId] = data.totalBalance
-          console.log('Asset total balance for', selectedAsset.assetId, ':', data.totalBalance)
+          totalBalancesMap[selectedAsset.assetId] = data.totalBalanceUnits
+          console.log('Asset total balance for', selectedAsset.assetId, ':', data.totalBalanceUnits)
           setAssetTotalBalances(totalBalancesMap)
         } else {
           console.error(`Failed to fetch total balance for asset ${selectedAsset.assetId}:`, response.status)
@@ -282,7 +295,7 @@ export default function Assets() {
         
         if (response.ok) {
           const data = await response.json()
-          totalBalancesMap[asset.assetId] = data.totalBalance
+          totalBalancesMap[asset.assetId] = data.totalBalanceUnits
         } else {
           console.error(`Failed to fetch total balance for asset ${asset.assetId}:`, response.status)
         }
@@ -388,8 +401,8 @@ export default function Assets() {
           assetId: createForm.assetId,
           name: createForm.name,
           symbol: createForm.symbol,
-          initialValue: parseInt(createForm.initialValue),
-          complianceRegistry: contractAddresses.complianceEngine
+          initialValueUnits: decimalToUnits(createForm.initialValue),
+          nonce: crypto.randomUUID()
         })
       })
 
@@ -410,24 +423,10 @@ export default function Assets() {
         return
       }
 
-      const data = await response.json()
-
-      // 模拟验证过程
-      setMessage('正在验证用户身份和资产状态...')
-      setStatus('info')
-      setTimeout(() => {
-        setMessage('资产创建成功！已完成用户身份和资产状态验证')
-        setStatus('success')
-        // 重置表单
-        setCreateForm({
-          assetId: '',
-          name: '',
-          symbol: '',
-          initialValue: ''
-        })
-        // 刷新资产列表
-        fetchAssets()
-      }, 3000)
+      setMessage('资产创建成功')
+      setStatus('success')
+      setCreateForm({ assetId: '', name: '', symbol: '', initialValue: '' })
+      await fetchAssets()
     } catch (error) {
       setMessage('网络错误，请稍后重试')
       setStatus('error')
@@ -465,12 +464,11 @@ export default function Assets() {
       return
     }
     
-    const userAddress = user.address // 使用用户地址，与获取余额时使用的地址一致
-    
     setIsLoading(true)
     setMessage('')
 
     try {
+      requireBoundWallet()
       const response = await fetch('/api/assets/deposit', {
         method: 'POST',
         headers: {
@@ -480,9 +478,8 @@ export default function Assets() {
         },
         body: JSON.stringify({
           assetId: depositForm.assetId,
-          value: parseFloat(depositForm.value), // 直接使用美元
-          userAddress: userAddress,
-          nonce: Date.now().toString() // 添加防重复提交的nonce
+          valueUnits: decimalToUnits(depositForm.value),
+          nonce: crypto.randomUUID()
         })
       })
 
@@ -500,22 +497,10 @@ export default function Assets() {
         return
       }
 
-      const data = await response.json()
-
-      // 模拟验证过程
-      setMessage('正在验证用户身份和资产状态...')
-      setStatus('info')
-      setTimeout(() => {
-        setMessage('存款成功！已完成用户身份和资产状态验证')
-        setStatus('success')
-        // 重置表单
-        setDepositForm({
-          assetId: '',
-          value: ''
-        })
-        // 刷新资产列表
-        fetchAssets()
-      }, 3000)
+      setMessage('存款成功')
+      setStatus('success')
+      setDepositForm({ assetId: '', value: '' })
+      await fetchAssets()
     } catch (error) {
       setMessage('网络错误，请稍后重试')
       setStatus('error')
@@ -547,12 +532,11 @@ export default function Assets() {
       return
     }
     
-    const userAddress = user.address
-    
     setIsLoading(true)
     setMessage('')
 
     try {
+      requireBoundWallet()
       const response = await fetch('/api/assets/redeem', {
         method: 'POST',
         headers: {
@@ -562,8 +546,8 @@ export default function Assets() {
         },
         body: JSON.stringify({
           assetId: redeemForm.assetId,
-          tokens: parseInt(redeemForm.tokens),
-          userAddress: userAddress
+          tokenUnits: decimalToUnits(redeemForm.tokens),
+          nonce: crypto.randomUUID()
         })
       })
 
@@ -581,22 +565,10 @@ export default function Assets() {
         return
       }
 
-      const data = await response.json()
-
-      // 模拟验证过程
-      setMessage('正在验证用户身份和资产状态...')
-      setStatus('info')
-      setTimeout(() => {
-        setMessage('赎回成功！已完成用户身份和资产状态验证')
-        setStatus('success')
-        // 重置表单
-        setRedeemForm({
-          assetId: '',
-          tokens: ''
-        })
-        // 刷新资产列表
-        fetchAssets()
-      }, 3000)
+      setMessage('赎回成功')
+      setStatus('success')
+      setRedeemForm({ assetId: '', tokens: '' })
+      await fetchAssets()
     } catch (error) {
       setMessage('网络错误，请稍后重试')
       setStatus('error')
@@ -628,12 +600,11 @@ export default function Assets() {
       return
     }
     
-    const userAddress = user.address
-    
     setIsLoading(true)
     setMessage('')
 
     try {
+      requireBoundWallet()
       const response = await fetch('/api/assets/transfer', {
         method: 'POST',
         headers: {
@@ -643,10 +614,9 @@ export default function Assets() {
         },
         body: JSON.stringify({
           assetId: transferForm.assetId,
-          fromAddress: userAddress,
           toAddress: transferForm.toAddress,
-          amount: parseInt(transferForm.amount),
-          nonce: Date.now().toString() // 添加防重复提交的nonce
+          amountUnits: decimalToUnits(transferForm.amount),
+          nonce: crypto.randomUUID()
         })
       })
 
@@ -664,21 +634,10 @@ export default function Assets() {
         return
       }
 
-      const data = await response.json()
-
-      // 模拟验证过程
-      setMessage('正在验证用户身份和资产状态...')
-      setStatus('info')
-      setTimeout(() => {
-        setMessage('转账成功！已完成用户身份和资产状态验证')
-        setStatus('success')
-        // 重置表单
-        setTransferForm({
-          assetId: '',
-          toAddress: '',
-          amount: ''
-        })
-      }, 3000)
+      setMessage('转账成功')
+      setStatus('success')
+      setTransferForm({ assetId: '', toAddress: '', amount: '' })
+      await fetchAssets()
     } catch (error) {
       setMessage('网络错误，请稍后重试')
       setStatus('error')
@@ -716,7 +675,8 @@ export default function Assets() {
           'X-User-Role': userRole
         },
         body: JSON.stringify({
-          assetId: freezeForm.assetId
+          assetId: freezeForm.assetId,
+          nonce: crypto.randomUUID()
         })
       })
 
@@ -734,21 +694,10 @@ export default function Assets() {
         return
       }
 
-      const data = await response.json()
-
-      // 模拟验证过程
-      setMessage('正在验证用户身份和资产状态...')
-      setStatus('info')
-      setTimeout(() => {
-        setMessage('资产冻结成功！已完成用户身份和资产状态验证')
-        setStatus('success')
-        // 重置表单
-        setFreezeForm({
-          assetId: ''
-        })
-        // 刷新资产列表
-        fetchAssets()
-      }, 3000)
+      setMessage('资产冻结成功')
+      setStatus('success')
+      setFreezeForm({ assetId: '' })
+      await fetchAssets()
     } catch (error) {
       setMessage('网络错误，请稍后重试')
       setStatus('error')
@@ -786,7 +735,8 @@ export default function Assets() {
           'X-User-Role': userRole
         },
         body: JSON.stringify({
-          assetId: freezeForm.assetId
+          assetId: freezeForm.assetId,
+          nonce: crypto.randomUUID()
         })
       })
 
@@ -804,21 +754,10 @@ export default function Assets() {
         return
       }
 
-      const data = await response.json()
-
-      // 模拟验证过程
-      setMessage('正在验证用户身份和资产状态...')
-      setStatus('info')
-      setTimeout(() => {
-        setMessage('资产解冻成功！已完成用户身份和资产状态验证')
-        setStatus('success')
-        // 重置表单
-        setFreezeForm({
-          assetId: ''
-        })
-        // 刷新资产列表
-        fetchAssets()
-      }, 3000)
+      setMessage('资产解冻成功')
+      setStatus('success')
+      setFreezeForm({ assetId: '' })
+      await fetchAssets()
     } catch (error) {
       setMessage('网络错误，请稍后重试')
       setStatus('error')
@@ -856,7 +795,8 @@ export default function Assets() {
           'X-User-Role': userRole
         },
         body: JSON.stringify({
-          assetId: 下架Form.assetId
+          assetId: 下架Form.assetId,
+          nonce: crypto.randomUUID()
         })
       })
 
@@ -874,21 +814,10 @@ export default function Assets() {
         return
       }
 
-      const data = await response.json()
-
-      // 模拟验证过程
-      setMessage('正在验证用户身份和资产状态...')
-      setStatus('info')
-      setTimeout(() => {
-        setMessage('资产下架成功！已完成用户身份和资产状态验证')
-        setStatus('success')
-        // 重置表单
-        set下架Form({
-          assetId: ''
-        })
-        // 刷新资产列表
-        fetchAssets()
-      }, 3000)
+      setMessage('资产下架成功')
+      setStatus('success')
+      set下架Form({ assetId: '' })
+      await fetchAssets()
     } catch (error) {
       setMessage('网络错误，请稍后重试')
       setStatus('error')
@@ -1067,13 +996,13 @@ export default function Assets() {
                             </div>
                             <div className="mt-2 text-sm text-gray-color">
                           <div>ID: {asset.assetId}</div>
-                          <div className="font-medium text-primary-dark">价值: ${asset.totalValue.toFixed(2)}</div>
-                          <div className="font-medium text-secondary-dark">代币总量: {asset.totalTokens}</div>
-                          <div className="font-medium text-primary-dark">代币价格: ${(Number(asset.totalValue) / Number(asset.totalTokens)).toFixed(2)}</div>
-                          <div className="font-medium text-secondary-dark">我的余额: {Math.min(userBalances[asset.assetId] || 0, asset.totalTokens)} 代币</div>
-                          <div className="font-medium text-secondary-dark">已售出: {Math.min(assetTotalBalances[asset.assetId] || 0, asset.totalTokens)} 代币</div>
-                          <div className="font-medium text-secondary-dark">可购买: {Math.max(0, asset.totalTokens - (assetTotalBalances[asset.assetId] || 0))} 代币</div>
-                          <div className="font-medium text-secondary-dark">我的价值: ${(Math.min(userBalances[asset.assetId] || 0, asset.totalTokens) * Number(asset.totalValue) / Number(asset.totalTokens)).toFixed(2)}</div>
+                          <div className="font-medium text-primary-dark">价值: ${formatUnits(asset.totalValueUnits)}</div>
+                          <div className="font-medium text-secondary-dark">代币总量: {formatUnits(asset.totalTokenUnits)}</div>
+                          <div className="font-medium text-primary-dark">代币价格: ${unitPrice(asset.totalValueUnits, asset.totalTokenUnits)}</div>
+                          <div className="font-medium text-secondary-dark">我的余额: {formatUnits(minUnits(userBalances[asset.assetId], asset.totalTokenUnits))} 代币</div>
+                          <div className="font-medium text-secondary-dark">已售出: {formatUnits(minUnits(assetTotalBalances[asset.assetId], asset.totalTokenUnits))} 代币</div>
+                          <div className="font-medium text-secondary-dark">可购买: {formatUnits(availableUnits(asset.totalTokenUnits, assetTotalBalances[asset.assetId]))} 代币</div>
+                          <div className="font-medium text-secondary-dark">我的价值: ${formatUnits(proportionalUnits(minUnits(userBalances[asset.assetId], asset.totalTokenUnits), asset.totalValueUnits, asset.totalTokenUnits))}</div>
                         </div>
                           </li>
                         ))}
@@ -1123,34 +1052,34 @@ export default function Assets() {
                       <div className="space-y-4">
                         <div>
                           <h3 className="text-sm font-medium text-gray-color mb-1">Total Value</h3>
-                          <p className="text-primary-dark font-medium">${selectedAsset.totalValue.toFixed(2)}</p>
+                          <p className="text-primary-dark font-medium">${formatUnits(selectedAsset.totalValueUnits)}</p>
                         </div>
                         <div>
                           <h3 className="text-sm font-medium text-gray-color mb-1">Total Tokens</h3>
-                          <p className="text-primary-dark font-medium">{selectedAsset.totalTokens}</p>
+                          <p className="text-primary-dark font-medium">{formatUnits(selectedAsset.totalTokenUnits)}</p>
                         </div>
                         <div>
                           <h3 className="text-sm font-medium text-gray-color mb-1">Sold Tokens</h3>
-                          <p className="text-primary-dark font-medium">{Math.min(assetTotalBalances[selectedAsset.assetId] || 0, selectedAsset.totalTokens)} 代币</p>
+                          <p className="text-primary-dark font-medium">{formatUnits(minUnits(assetTotalBalances[selectedAsset.assetId], selectedAsset.totalTokenUnits))} 代币</p>
                         </div>
                         <div>
                           <h3 className="text-sm font-medium text-gray-color mb-1">Available Tokens</h3>
-                          <p className="text-primary-dark font-medium">{Math.max(0, selectedAsset.totalTokens - (assetTotalBalances[selectedAsset.assetId] || 0))} 代币</p>
+                          <p className="text-primary-dark font-medium">{formatUnits(availableUnits(selectedAsset.totalTokenUnits, assetTotalBalances[selectedAsset.assetId]))} 代币</p>
                         </div>
                         <div>
                           <h3 className="text-sm font-medium text-gray-color mb-1">Token Price</h3>
-                          <p className="text-primary-dark font-medium">${(Number(selectedAsset.totalValue) / Number(selectedAsset.totalTokens)).toFixed(2)}</p>
+                          <p className="text-primary-dark font-medium">${unitPrice(selectedAsset.totalValueUnits, selectedAsset.totalTokenUnits)}</p>
                         </div>
                         <div>
                           <h3 className="text-sm font-medium text-gray-color mb-1">My Balance</h3>
-                          <p className="text-secondary-dark font-medium">{Math.min(userBalances[selectedAsset.assetId] || 0, selectedAsset.totalTokens)} 代币</p>
+                          <p className="text-secondary-dark font-medium">{formatUnits(minUnits(userBalances[selectedAsset.assetId], selectedAsset.totalTokenUnits))} 代币</p>
                         </div>
                         <div>
                           <h3 className="text-sm font-medium text-gray-color mb-1">My Value</h3>
-                          <p className="text-secondary-dark font-medium">${(Math.min(userBalances[selectedAsset.assetId] || 0, selectedAsset.totalTokens) * Number(selectedAsset.totalValue) / Number(selectedAsset.totalTokens)).toFixed(2)}</p>
+                          <p className="text-secondary-dark font-medium">${formatUnits(proportionalUnits(minUnits(userBalances[selectedAsset.assetId], selectedAsset.totalTokenUnits), selectedAsset.totalValueUnits, selectedAsset.totalTokenUnits))}</p>
                         </div>
                         <div>
-                          <h3 className="text-sm font-medium text-gray-color mb-1">Token Address</h3>
+                          <h3 className="text-sm font-medium text-gray-color mb-1">Settlement Reference</h3>
                           <p className="text-primary-dark font-medium break-all">{selectedAsset.tokenAddress}</p>
                         </div>
                       </div>
@@ -1320,16 +1249,16 @@ export default function Assets() {
                       disabled={isLoading || !isKYCVerified || (() => {
                         const asset = assets.find(a => a.assetId === depositForm.assetId);
                         if (!asset) return false;
-                        const totalBalance = assetTotalBalances[depositForm.assetId] || 0;
-                        return totalBalance >= asset.totalTokens;
+                        const totalBalance = assetTotalBalances[depositForm.assetId] || '0';
+                        return BigInt(totalBalance) >= BigInt(asset.totalTokenUnits);
                       })()}
                       className="btn btn-secondary w-full"
                     >
                       {isLoading ? 'Depositing...' : !isKYCVerified ? 'Please complete KYC verification first' : (() => {
                         const asset = assets.find(a => a.assetId === depositForm.assetId);
                         if (!asset) return 'Deposit';
-                        const totalBalance = assetTotalBalances[depositForm.assetId] || 0;
-                        return totalBalance >= asset.totalTokens ? 'Reached total supply' : 'Deposit';
+                        const totalBalance = assetTotalBalances[depositForm.assetId] || '0';
+                        return BigInt(totalBalance) >= BigInt(asset.totalTokenUnits) ? 'Reached total supply' : 'Deposit';
                       })()}
                     </button>
                   </form>

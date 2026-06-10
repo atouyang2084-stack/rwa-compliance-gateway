@@ -2,7 +2,6 @@ package database
 
 import (
 	"database/sql"
-	"fmt"
 	"log"
 	"strings"
 
@@ -21,6 +20,10 @@ func InitDatabase(databaseURL string) error {
 
 	// 测试连接
 	if err = DB.Ping(); err != nil {
+		return err
+	}
+	DB.SetMaxOpenConns(1)
+	if _, err = DB.Exec("PRAGMA foreign_keys = ON"); err != nil {
 		return err
 	}
 
@@ -53,6 +56,23 @@ func createTables() error {
 		return err
 	}
 
+	// 创建KYC信息表
+	_, err = DB.Exec(`
+	CREATE TABLE IF NOT EXISTS kyc_information (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		user_address TEXT UNIQUE NOT NULL,
+		desensitized_data TEXT NOT NULL,
+		data_hash TEXT NOT NULL,
+		verification_id TEXT NOT NULL,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		FOREIGN KEY (user_address) REFERENCES users(address)
+	)
+	`)
+	if err != nil {
+		return err
+	}
+
 	// 创建资产表
 	_, err = DB.Exec(`
 	CREATE TABLE IF NOT EXISTS assets (
@@ -66,6 +86,67 @@ func createTables() error {
 	)
 	`)
 	if err != nil {
+		return err
+	}
+
+	_, err = DB.Exec(`
+	CREATE TABLE IF NOT EXISTS asset_unit_ledgers (
+		asset_id TEXT PRIMARY KEY,
+		total_value_units TEXT NOT NULL,
+		total_token_units TEXT NOT NULL,
+		FOREIGN KEY (asset_id) REFERENCES assets(asset_id)
+	);
+
+	CREATE TABLE IF NOT EXISTS user_asset_unit_balances (
+		user_address TEXT NOT NULL,
+		asset_id TEXT NOT NULL,
+		balance_units TEXT NOT NULL DEFAULT '0',
+		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		PRIMARY KEY (user_address, asset_id),
+		FOREIGN KEY (asset_id) REFERENCES assets(asset_id)
+	);
+
+	CREATE TABLE IF NOT EXISTS request_nonces (
+		nonce TEXT PRIMARY KEY,
+		actor_address TEXT NOT NULL,
+		action TEXT NOT NULL,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	);
+
+	CREATE TABLE IF NOT EXISTS audit_unit_logs (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		action TEXT NOT NULL,
+		user_address TEXT NOT NULL,
+		asset_id TEXT,
+		amount_units TEXT NOT NULL,
+		target_address TEXT,
+		request_nonce TEXT NOT NULL,
+		previous_hash TEXT NOT NULL,
+		event_hash TEXT NOT NULL UNIQUE,
+		details TEXT,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	);
+
+	CREATE TABLE IF NOT EXISTS jurisdictions (
+		code TEXT PRIMARY KEY,
+		restricted BOOLEAN NOT NULL DEFAULT 0,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	);
+
+	CREATE TABLE IF NOT EXISTS address_jurisdictions (
+		user_address TEXT PRIMARY KEY,
+		jurisdiction_code TEXT NOT NULL,
+		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		FOREIGN KEY (jurisdiction_code) REFERENCES jurisdictions(code)
+	)
+	`)
+	if err != nil {
+		return err
+	}
+	if _, err = DB.Exec(`
+		INSERT OR IGNORE INTO jurisdictions (code) VALUES ('US'), ('CN'), ('EU'), ('JP')
+	`); err != nil {
 		return err
 	}
 
@@ -111,16 +192,6 @@ func Close() error {
 	return nil
 }
 
-// UpdateAssetStatus 更新资产状态
-func UpdateAssetStatus(assetId string, isActive bool) error {
-	_, err := DB.Exec(
-		"UPDATE assets SET is_active = ? WHERE asset_id = ?",
-		isActive,
-		assetId,
-	)
-	return err
-}
-
 // User 用户结构体
 type User struct {
 	ID           int    `json:"id"`
@@ -136,6 +207,8 @@ type User struct {
 
 // CreateUser 创建新用户
 func CreateUser(username, email, passwordHash, address, role string) error {
+	// 统一地址格式为小写
+	address = strings.ToLower(address)
 	_, err := DB.Exec(
 		"INSERT INTO users (username, email, password_hash, address, role) VALUES (?, ?, ?, ?, ?)",
 		username, email, passwordHash, address, role,
@@ -146,24 +219,20 @@ func CreateUser(username, email, passwordHash, address, role string) error {
 // GetUserByUsername 根据用户名获取用户
 func GetUserByUsername(username string) (*User, error) {
 	var user User
-	// 打印查询信息以便调试
-	fmt.Printf("Querying user: %s\n", username)
 	err := DB.QueryRow(
 		"SELECT id, username, email, password_hash, address, role, kyc_verified, created_at, updated_at FROM users WHERE username = ?",
 		username,
 	).Scan(&user.ID, &user.Username, &user.Email, &user.PasswordHash, &user.Address, &user.Role, &user.KYCVerified, &user.CreatedAt, &user.UpdatedAt)
 	if err != nil {
-		// 打印错误信息以便调试
-		fmt.Printf("Query error: %v\n", err)
 		return nil, err
 	}
-	// 打印查询结果以便调试
-	fmt.Printf("Found user: %s, ID: %d, KYCVerified: %v\n", user.Username, user.ID, user.KYCVerified)
 	return &user, nil
 }
 
 // UpdateKYCVerified 更新用户的KYC验证状态
 func UpdateKYCVerified(address string, verified bool) error {
+	// 统一地址格式为小写
+	address = strings.ToLower(address)
 	_, err := DB.Exec(
 		"UPDATE users SET kyc_verified = ?, updated_at = CURRENT_TIMESTAMP WHERE address = ?",
 		verified, address,
@@ -173,6 +242,8 @@ func UpdateKYCVerified(address string, verified bool) error {
 
 // GetKYCVerified 获取用户的KYC验证状态
 func GetKYCVerified(address string) (bool, error) {
+	// 统一地址格式为小写
+	address = strings.ToLower(address)
 	var verified bool
 	err := DB.QueryRow(
 		"SELECT kyc_verified FROM users WHERE address = ?",
@@ -182,6 +253,58 @@ func GetKYCVerified(address string) (bool, error) {
 		return false, err
 	}
 	return verified, nil
+}
+
+// KYCInformation KYC信息结构体
+type KYCInformation struct {
+	ID               int    `json:"id"`
+	UserAddress      string `json:"user_address"`
+	DesensitizedData string `json:"desensitized_data"`
+	DataHash         string `json:"data_hash"`
+	VerificationID   string `json:"verification_id"`
+	CreatedAt        string `json:"created_at"`
+	UpdatedAt        string `json:"updated_at"`
+}
+
+// StoreKYCInformation 存储KYC信息
+func StoreKYCInformation(userAddress, desensitizedData, dataHash, verificationID string) error {
+	// 统一地址格式为小写
+	userAddress = strings.ToLower(userAddress)
+	_, err := DB.Exec(
+		"INSERT OR REPLACE INTO kyc_information (user_address, desensitized_data, data_hash, verification_id, updated_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)",
+		userAddress, desensitizedData, dataHash, verificationID,
+	)
+	return err
+}
+
+// GetKYCInformation 获取用户的KYC信息
+func GetKYCInformation(userAddress string) (*KYCInformation, error) {
+	// 统一地址格式为小写
+	userAddress = strings.ToLower(userAddress)
+	var kycInfo KYCInformation
+	err := DB.QueryRow(
+		"SELECT id, user_address, desensitized_data, data_hash, verification_id, created_at, updated_at FROM kyc_information WHERE user_address = ?",
+		userAddress,
+	).Scan(&kycInfo.ID, &kycInfo.UserAddress, &kycInfo.DesensitizedData, &kycInfo.DataHash, &kycInfo.VerificationID, &kycInfo.CreatedAt, &kycInfo.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &kycInfo, nil
+}
+
+// GetKYCDataHash 获取用户的KYC数据哈希
+func GetKYCDataHash(userAddress string) (string, error) {
+	// 统一地址格式为小写
+	userAddress = strings.ToLower(userAddress)
+	var dataHash string
+	err := DB.QueryRow(
+		"SELECT data_hash FROM kyc_information WHERE user_address = ?",
+		userAddress,
+	).Scan(&dataHash)
+	if err != nil {
+		return "", err
+	}
+	return dataHash, nil
 }
 
 // GetUserByEmail 根据邮箱获取用户
@@ -199,6 +322,8 @@ func GetUserByEmail(email string) (*User, error) {
 
 // GetUserByAddress 根据地址获取用户
 func GetUserByAddress(address string) (*User, error) {
+	// 统一地址格式为小写
+	address = strings.ToLower(address)
 	var user User
 	err := DB.QueryRow(
 		"SELECT id, username, email, password_hash, address, role, kyc_verified, created_at, updated_at FROM users WHERE address = ?",
@@ -221,179 +346,8 @@ func UpdateUserRole(username, role string) error {
 
 // UserAssetBalance 用户资产余额结构体
 type UserAssetBalance struct {
-	ID          int    `json:"id"`
-	UserAddress string `json:"user_address"`
-	AssetID     string `json:"asset_id"`
-	Balance     int    `json:"balance"`
-	CreatedAt   string `json:"created_at"`
-	UpdatedAt   string `json:"updated_at"`
-}
-
-// GetUserAssetBalance 获取用户的资产余额
-func GetUserAssetBalance(userAddress, assetId string) (int, error) {
-	// 统一地址格式为小写
-	userAddress = strings.ToLower(userAddress)
-	
-	var balance int
-	err := DB.QueryRow(
-		"SELECT balance FROM user_asset_balances WHERE user_address = ? AND asset_id = ?",
-		userAddress, assetId,
-	).Scan(&balance)
-	if err == sql.ErrNoRows {
-		return 0, nil
-	}
-	return balance, err
-}
-
-// UpdateUserAssetBalance 更新用户的资产余额
-func UpdateUserAssetBalance(userAddress, assetId string, amount int) error {
-	// 统一地址格式为小写
-	userAddress = strings.ToLower(userAddress)
-	
-	// 获取资产信息，检查总代币数量
-	var totalTokens uint64
-	err := DB.QueryRow("SELECT total_tokens FROM assets WHERE asset_id = ?", assetId).Scan(&totalTokens)
-	if err != nil {
-		return err
-	}
-
-	// 获取用户当前余额
-	currentBalance, err := GetUserAssetBalance(userAddress, assetId)
-	if err != nil {
-		return err
-	}
-
-	// 计算新余额
-	newBalance := currentBalance + amount
-
-	// 确保新余额不会超过总代币数量
-	if newBalance > int(totalTokens) {
-		newBalance = int(totalTokens)
-	}
-
-	// 确保新余额不会小于0
-	if newBalance < 0 {
-		newBalance = 0
-	}
-
-	// 尝试更新余额
-	result, err := DB.Exec(
-		"UPDATE user_asset_balances SET balance = ?, updated_at = CURRENT_TIMESTAMP WHERE user_address = ? AND asset_id = ?",
-		newBalance, userAddress, assetId,
-	)
-	if err != nil {
-		return err
-	}
-
-	// 检查是否有记录被更新
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-
-	// 如果没有记录被更新，创建新记录
-	if rowsAffected == 0 {
-		_, err = DB.Exec(
-			"INSERT INTO user_asset_balances (user_address, asset_id, balance) VALUES (?, ?, ?)",
-			userAddress, assetId, newBalance,
-		)
-	}
-
-	return err
-}
-
-// GetUserBalances 获取用户的所有资产余额
-func GetUserBalances(userAddress string) ([]UserAssetBalance, error) {
-	// 统一地址格式为小写
-	userAddress = strings.ToLower(userAddress)
-	
-	rows, err := DB.Query(
-		"SELECT id, user_address, asset_id, balance, created_at, updated_at FROM user_asset_balances WHERE user_address = ?",
-		userAddress,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var balances []UserAssetBalance
-	for rows.Next() {
-		var balance UserAssetBalance
-		err := rows.Scan(&balance.ID, &balance.UserAddress, &balance.AssetID, &balance.Balance, &balance.CreatedAt, &balance.UpdatedAt)
-		if err != nil {
-			return nil, err
-		}
-		balances = append(balances, balance)
-	}
-
-	return balances, nil
-}
-
-// GetAllUserAssetBalances 获取所有用户的特定资产余额
-func GetAllUserAssetBalances(assetId string) ([]UserAssetBalance, error) {
-	rows, err := DB.Query(
-		"SELECT id, user_address, asset_id, balance, created_at, updated_at FROM user_asset_balances WHERE asset_id = ?",
-		assetId,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var balances []UserAssetBalance
-	for rows.Next() {
-		var balance UserAssetBalance
-		err := rows.Scan(&balance.ID, &balance.UserAddress, &balance.AssetID, &balance.Balance, &balance.CreatedAt, &balance.UpdatedAt)
-		if err != nil {
-			return nil, err
-		}
-		balances = append(balances, balance)
-	}
-
-	return balances, nil
-}
-
-// AuditLog 审计日志结构体
-type AuditLog struct {
-	ID            int    `json:"id"`
-	Action        string `json:"action"`
-	UserAddress   string `json:"user_address"`
-	AssetID       string `json:"asset_id"`
-	Amount        int    `json:"amount"`
-	TargetAddress string `json:"target_address"`
-	Details       string `json:"details"`
-	CreatedAt     string `json:"created_at"`
-}
-
-// CreateAuditLog 创建审计日志
-func CreateAuditLog(action, userAddress, assetId string, amount int, targetAddress, details string) error {
-	_, err := DB.Exec(
-		"INSERT INTO audit_logs (action, user_address, asset_id, amount, target_address, details) VALUES (?, ?, ?, ?, ?, ?)",
-		action, userAddress, assetId, amount, targetAddress, details,
-	)
-	return err
-}
-
-// GetAssetAuditLogs 获取资产的审计日志
-func GetAssetAuditLogs(assetId string) ([]AuditLog, error) {
-	rows, err := DB.Query(
-		"SELECT id, action, user_address, asset_id, amount, target_address, details, created_at FROM audit_logs WHERE asset_id = ? ORDER BY created_at DESC",
-		assetId,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var logs []AuditLog
-	for rows.Next() {
-		var log AuditLog
-		err := rows.Scan(&log.ID, &log.Action, &log.UserAddress, &log.AssetID, &log.Amount, &log.TargetAddress, &log.Details, &log.CreatedAt)
-		if err != nil {
-			return nil, err
-		}
-		logs = append(logs, log)
-	}
-
-	return logs, nil
+	UserAddress  string `json:"userAddress"`
+	AssetID      string `json:"assetId"`
+	BalanceUnits string `json:"balanceUnits"`
+	UpdatedAt    string `json:"updatedAt"`
 }

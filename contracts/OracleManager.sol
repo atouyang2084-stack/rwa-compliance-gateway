@@ -91,7 +91,7 @@ contract OracleManager {
 
     // 计算资产价值（考虑小数位数，带价格新鲜度检查）
     function calculateAssetValue(string calldata assetId, uint256 quantity) public view returns (uint256) {
-        (uint256 price, uint256 timestamp) = getAssetPrice(assetId);
+        (uint256 price,) = getAssetPrice(assetId);
         uint8 decimals = assetDecimals[assetId];
         
         // 检查价格是否过期（默认24小时）

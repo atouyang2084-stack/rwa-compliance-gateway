@@ -6,48 +6,33 @@ import "./OracleManager.sol";
 import "./ComplianceRegistry.sol";
 
 contract AssetManager {
-    // 资产信息结构体
     struct Asset {
         string assetId;
         string name;
         string symbol;
-        uint256 totalValue; // 资产总价值（单位：美分）
-        uint256 totalTokens; // 已发行的代币数量
-        address tokenAddress; // 对应的代币合约地址
-        bool isActive; // 资产是否活跃
+        uint256 totalValue;
+        uint256 totalTokens;
+        address tokenAddress;
+        bool isActive;
     }
 
-    // 资产映射
     mapping(string => Asset) public assets;
-    // 资产ID列表
     string[] public assetIds;
-
-    // 事件定义
-    event AssetCreated(string indexed assetId, string name, string symbol, uint256 initialValue);
-    event Deposit(string indexed assetId, uint256 value, uint256 tokensMinted);
-    event Redeem(string indexed assetId, uint256 tokensBurned, uint256 valueReleased);
-    event AssetValueUpdated(string indexed assetId, uint256 newValue);
-    event Paused();
-    event Unpaused();
-
-    // 权限控制
-    address public admin;
+    address public immutable admin;
     mapping(address => bool) public authorizedIssuers;
-    
-    // Oracle管理器
     OracleManager public oracleManager;
-    // 合规注册表
-    ComplianceRegistry public complianceRegistry;
-    
-    // 紧急暂停
-    bool public paused = false;
-    
-    // 重入锁
-    bool private _reentrancyLock = false;
+    ComplianceRegistry public immutable complianceRegistry;
+    bool public paused;
+    bool private entered;
 
-    // 修饰符
+    event AssetCreated(string indexed assetId, string name, string symbol, uint256 initialValue, address token);
+    event Deposit(string indexed assetId, uint256 value, uint256 tokensMinted);
+    event Redeem(string indexed assetId, address indexed investor, uint256 tokensBurned, uint256 valueReleased);
+    event AssetValueUpdated(string indexed assetId, uint256 newValue);
+    event AssetStatusChanged(string indexed assetId, bool active);
+
     modifier onlyAdmin() {
-        require(msg.sender == admin, "Not authorized");
+        require(msg.sender == admin, "Not authorized admin");
         _;
     }
 
@@ -55,237 +40,173 @@ contract AssetManager {
         require(authorizedIssuers[msg.sender], "Not authorized issuer");
         _;
     }
-    
+
     modifier whenNotPaused() {
         require(!paused, "Contract is paused");
         _;
     }
-    
+
     modifier nonReentrant() {
-        require(!_reentrancyLock, "ReentrancyGuard: reentrant call");
-        _reentrancyLock = true;
+        require(!entered, "Reentrant call");
+        entered = true;
         _;
-        _reentrancyLock = false;
+        entered = false;
     }
 
-    // 构造函数
-    constructor(address _oracleManager, address _complianceRegistry) {
+    constructor(address oracleManager_, address complianceRegistry_) {
+        require(oracleManager_ != address(0) && complianceRegistry_ != address(0), "Invalid dependency");
         admin = msg.sender;
-        oracleManager = OracleManager(_oracleManager);
-        complianceRegistry = ComplianceRegistry(_complianceRegistry);
+        authorizedIssuers[msg.sender] = true;
+        oracleManager = OracleManager(oracleManager_);
+        complianceRegistry = ComplianceRegistry(complianceRegistry_);
     }
-    
-    // 暂停合约
+
     function pause() external onlyAdmin {
-        require(!paused, "Contract is already paused");
         paused = true;
-        emit Paused();
     }
-    
-    // 恢复合约
+
     function unpause() external onlyAdmin {
-        require(paused, "Contract is not paused");
         paused = false;
-        emit Unpaused();
     }
 
-    // 设置Oracle管理器
-    function setOracleManager(address _oracleManager) external onlyAdmin {
-        oracleManager = OracleManager(_oracleManager);
-    }
-    
-    // 设置合规注册表
-    function setComplianceRegistry(address _complianceRegistry) external onlyAdmin {
-        complianceRegistry = ComplianceRegistry(_complianceRegistry);
+    function setOracleManager(address oracleManager_) external onlyAdmin {
+        require(oracleManager_ != address(0), "Invalid oracle");
+        oracleManager = OracleManager(oracleManager_);
     }
 
-    // 添加授权发行方
     function addAuthorizedIssuer(address issuer) external onlyAdmin {
         authorizedIssuers[issuer] = true;
     }
 
-    // 移除授权发行方
     function removeAuthorizedIssuer(address issuer) external onlyAdmin {
         authorizedIssuers[issuer] = false;
     }
 
-    // 更新资产价值（用于资产价值变化时）
-    function updateAssetValue(string calldata assetId, uint256 newValue) public onlyAuthorizedIssuer whenNotPaused {
-        // 检查资产是否存在
-        require(bytes(assets[assetId].assetId).length > 0, "Asset not found");
-        // 检查资产是否活跃
-        require(assets[assetId].isActive, "Asset is not active");
-        // 检查调用者是否KYC验证通过
-        require(complianceRegistry.isKYCVerified(msg.sender), "KYC verification required");
-
-        Asset storage asset = assets[assetId];
-        uint256 oldValue = asset.totalValue;
-
-        // 更新资产价值
-        asset.totalValue = newValue;
-
-        // 调整代币数量以保持1:1锚定
-        if (newValue > oldValue) {
-            // 增加代币
-            uint256 tokenToMint = newValue - oldValue;
-            asset.totalTokens += tokenToMint;
-            RWAToken token = RWAToken(asset.tokenAddress);
-            token.mint(msg.sender, tokenToMint);
-        } else if (newValue < oldValue) {
-            // 减少代币
-            uint256 tokenToBurn = oldValue - newValue;
-            asset.totalTokens -= tokenToBurn;
-            // 从储备中销毁代币
-            RWAToken token = RWAToken(asset.tokenAddress);
-            token.burn(tokenToBurn);
-        }
-
-        // 触发事件
-        emit AssetValueUpdated(assetId, newValue);
-    }
-
-    // 通过Oracle自动更新资产价值
-    function updateAssetValueWithOracle(string calldata assetId, uint256 quantity) external onlyAuthorizedIssuer whenNotPaused {
-        // 检查资产是否存在
-        require(bytes(assets[assetId].assetId).length > 0, "Asset not found");
-        // 检查调用者是否KYC验证通过
-        require(complianceRegistry.isKYCVerified(msg.sender), "KYC verification required");
-
-        // 使用Oracle计算资产价值
-        uint256 newValue = oracleManager.calculateAssetValue(assetId, quantity);
-
-        // 调用现有的更新资产价值函数
-        updateAssetValue(assetId, newValue);
-    }
-
-    // 创建新资产
     function createAsset(
         string calldata assetId,
         string calldata name,
         string calldata symbol,
-        uint256 initialValue,
-        address complianceRegistry
+        uint256 initialValue
     ) external onlyAuthorizedIssuer whenNotPaused returns (address) {
-        // 检查资产ID是否已存在
-        require(bytes(assets[assetId].assetId).length == 0, "Asset already exists");
-        // 检查调用者是否KYC验证通过
-        require(ComplianceRegistry(complianceRegistry).isKYCVerified(msg.sender), "KYC verification required");
+        require(bytes(assetId).length > 0 && bytes(assets[assetId].assetId).length == 0, "Invalid or duplicate asset");
+        require(initialValue > 0, "Initial value required");
+        require(complianceRegistry.isKYCVerified(msg.sender), "KYC verification required");
 
-        // 部署新的代币合约
-        RWAToken token = new RWAToken(name, symbol, 2, complianceRegistry);
-
-        // 初始化资产信息
-        assets[assetId] = Asset({
-            assetId: assetId,
-            name: name,
-            symbol: symbol,
-            totalValue: initialValue,
-            totalTokens: initialValue, // 1:1 锚定，初始代币数量等于资产价值（单位：美分）
-            tokenAddress: address(token),
-            isActive: true
-        });
-
-        // 添加到资产ID列表
+        RWAToken token = new RWAToken(name, symbol, 2, address(complianceRegistry));
+        assets[assetId] = Asset(assetId, name, symbol, initialValue, initialValue, address(token), true);
         assetIds.push(assetId);
 
-        // 铸造初始代币到调用者地址
+        complianceRegistry.registerAsset(
+            assetId, address(token), ComplianceRegistry.ComplianceStandard.ERC3643, initialValue
+        );
+        complianceRegistry.setWhitelisted(address(token), msg.sender, true);
         token.mint(msg.sender, initialValue);
 
-        // 触发事件
-        emit AssetCreated(assetId, name, symbol, initialValue);
+        emit AssetCreated(assetId, name, symbol, initialValue, address(token));
         emit Deposit(assetId, initialValue, initialValue);
-
         return address(token);
     }
 
-    // 存款（增加资产价值并铸造相应代币）
-    function deposit(string calldata assetId, uint256 value) external onlyAuthorizedIssuer nonReentrant whenNotPaused {
-        // 检查资产是否存在且活跃
-        require(bytes(assets[assetId].assetId).length > 0, "Asset not found");
-        require(assets[assetId].isActive, "Asset is not active");
-        // 检查调用者是否KYC验证通过
+    function deposit(string calldata assetId, uint256 value)
+        external
+        onlyAuthorizedIssuer
+        nonReentrant
+        whenNotPaused
+    {
+        require(value > 0, "Value required");
+        Asset storage asset = _activeAsset(assetId);
         require(complianceRegistry.isKYCVerified(msg.sender), "KYC verification required");
-
-        Asset storage asset = assets[assetId];
-
-        // 更新资产价值和代币数量
         asset.totalValue += value;
         asset.totalTokens += value;
-
-        // 铸造代币到调用者地址
-        RWAToken token = RWAToken(asset.tokenAddress);
-        token.mint(msg.sender, value);
-
-        // 触发事件
+        complianceRegistry.updateAssetValuation(assetId, asset.totalValue);
+        RWAToken(asset.tokenAddress).mint(msg.sender, value);
         emit Deposit(assetId, value, value);
     }
 
-    // 赎回（销毁代币并释放相应资产价值）
     function redeem(string calldata assetId, uint256 tokens) external nonReentrant whenNotPaused {
-        // 检查资产是否存在且活跃
-        require(bytes(assets[assetId].assetId).length > 0, "Asset not found");
-        require(assets[assetId].isActive, "Asset is not active");
-        // 检查调用者是否KYC验证通过
+        require(tokens > 0, "Tokens required");
+        Asset storage asset = _activeAsset(assetId);
         require(complianceRegistry.isKYCVerified(msg.sender), "KYC verification required");
-
-        Asset storage asset = assets[assetId];
-
-        // 检查代币数量是否足够
-        RWAToken token = RWAToken(asset.tokenAddress);
-        require(token.balanceOf(msg.sender) >= tokens, "Insufficient tokens");
-
-        // 更新资产价值和代币数量
+        require(tokens <= asset.totalTokens, "Exceeds asset supply");
+        RWAToken(asset.tokenAddress).burnFrom(msg.sender, tokens);
         asset.totalValue -= tokens;
         asset.totalTokens -= tokens;
-
-        // 销毁代币
-        token.burn(tokens);
-
-        // 触发事件
-        emit Redeem(assetId, tokens, tokens);
+        complianceRegistry.updateAssetValuation(assetId, asset.totalValue);
+        emit Redeem(assetId, msg.sender, tokens, tokens);
     }
 
-    // 暂停资产
+    function updateAssetValue(string calldata assetId, uint256 newValue)
+        public
+        onlyAuthorizedIssuer
+        nonReentrant
+        whenNotPaused
+    {
+        require(newValue > 0, "Value required");
+        Asset storage asset = _activeAsset(assetId);
+        uint256 oldValue = asset.totalValue;
+        RWAToken token = RWAToken(asset.tokenAddress);
+        if (newValue > oldValue) {
+            uint256 increase = newValue - oldValue;
+            complianceRegistry.updateAssetValuation(assetId, newValue);
+            token.mint(msg.sender, increase);
+            asset.totalTokens += increase;
+        } else if (newValue < oldValue) {
+            uint256 decrease = oldValue - newValue;
+            token.burnFrom(msg.sender, decrease);
+            asset.totalTokens -= decrease;
+            complianceRegistry.updateAssetValuation(assetId, newValue);
+        }
+        asset.totalValue = newValue;
+        emit AssetValueUpdated(assetId, newValue);
+    }
+
+    function updateAssetValueWithOracle(string calldata assetId, uint256 quantity)
+        external
+        onlyAuthorizedIssuer
+        whenNotPaused
+    {
+        updateAssetValue(assetId, oracleManager.calculateAssetValue(assetId, quantity));
+    }
+
     function pauseAsset(string calldata assetId) external onlyAdmin {
-        require(bytes(assets[assetId].assetId).length > 0, "Asset not found");
-        assets[assetId].isActive = false;
+        Asset storage asset = _asset(assetId);
+        asset.isActive = false;
+        complianceRegistry.updateAssetStatus(assetId, ComplianceRegistry.AssetStatus.Frozen);
+        emit AssetStatusChanged(assetId, false);
     }
 
-    // 恢复资产
     function resumeAsset(string calldata assetId) external onlyAdmin {
-        require(bytes(assets[assetId].assetId).length > 0, "Asset not found");
-        assets[assetId].isActive = true;
+        Asset storage asset = _asset(assetId);
+        asset.isActive = true;
+        complianceRegistry.updateAssetStatus(assetId, ComplianceRegistry.AssetStatus.Active);
+        emit AssetStatusChanged(assetId, true);
     }
 
-    // 获取资产数量
     function getAssetCount() external view returns (uint256) {
         return assetIds.length;
     }
 
-    // 获取资产详情
-    function getAssetDetails(string calldata assetId) external view returns (
-        string memory, // name
-        string memory, // symbol
-        uint256, // totalValue
-        uint256, // totalTokens
-        address, // tokenAddress
-        bool // isActive
-    ) {
-        Asset storage asset = assets[assetId];
-        return (
-            asset.name,
-            asset.symbol,
-            asset.totalValue,
-            asset.totalTokens,
-            asset.tokenAddress,
-            asset.isActive
-        );
+    function getAssetDetails(string calldata assetId)
+        external
+        view
+        returns (string memory, string memory, uint256, uint256, address, bool)
+    {
+        Asset storage asset = _asset(assetId);
+        return (asset.name, asset.symbol, asset.totalValue, asset.totalTokens, asset.tokenAddress, asset.isActive);
     }
 
-    // 检查资产与代币的锚定状态
     function checkPegStatus(string calldata assetId) external view returns (bool, uint256, uint256) {
-        Asset storage asset = assets[assetId];
-        bool isPegged = asset.totalValue == asset.totalTokens;
-        return (isPegged, asset.totalValue, asset.totalTokens);
+        Asset storage asset = _asset(assetId);
+        return (asset.totalValue == asset.totalTokens, asset.totalValue, asset.totalTokens);
+    }
+
+    function _activeAsset(string memory assetId) internal view returns (Asset storage asset) {
+        asset = _asset(assetId);
+        require(asset.isActive, "Asset is not active");
+    }
+
+    function _asset(string memory assetId) internal view returns (Asset storage asset) {
+        asset = assets[assetId];
+        require(bytes(asset.assetId).length > 0, "Asset not found");
     }
 }

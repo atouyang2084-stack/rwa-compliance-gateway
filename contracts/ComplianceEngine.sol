@@ -3,71 +3,89 @@ pragma solidity ^0.8.20;
 
 import "./ComplianceRegistry.sol";
 
+interface IComplianceBalance {
+    function balanceOf(address user) external view returns (uint256);
+}
+
 contract ComplianceEngine is ComplianceRegistry {
-
-    // KYC验证映射
-    mapping(address => bool) public kycVerified;
-    mapping(address => string) public verificationIds;
-
-    // 黑名单映射
-    mapping(address => bool) public blacklisted;
-
-    // 角色映射
-    mapping(address => mapping(Role => bool)) public roles;
-
-    // 司法管辖区映射
-    mapping(string => bool) public jurisdictions; // 司法管辖区是否存在
-    mapping(string => bool) public restrictedJurisdictions; // 司法管辖区是否被限制
-    mapping(address => string) public addressJurisdictions; // 地址对应的司法管辖区
-
-    // 资产映射
-    mapping(string => Asset) public assets;
-    string[] public assetIds;
-
-    // 资产结构体
     struct Asset {
         string assetId;
-        address contractAddress;
+        address token;
         uint256 totalValuation;
         ComplianceStandard standard;
         AssetStatus status;
-        uint256 holderLimit; // 持有者数量上限
-        uint256 maxHoldingPerAccount; // 单一账户最大持仓限制
+        uint256 holderLimit;
+        uint256 maxHoldingPerAccount;
     }
 
-    // 代币持有者映射（用于跟踪持有者数量）
-    mapping(address => mapping(address => bool)) public tokenHolders; // 合约地址 -> 持有者地址 -> 是否持有
-    mapping(address => uint256) public holderCount; // 合约地址 -> 持有者数量
+    address public immutable admin;
+    mapping(address => bool) private kycVerified;
+    mapping(address => string) private verificationIds;
+    mapping(address => string) private kycDataHashes;
+    mapping(address => bool) private blacklisted;
+    mapping(address => mapping(Role => bool)) private roles;
+    mapping(bytes32 => bool) private jurisdictions;
+    mapping(bytes32 => bool) private restrictedJurisdictions;
+    mapping(address => string) private addressJurisdictions;
+    mapping(string => Asset) private assets;
+    mapping(address => string) private assetIdByToken;
+    mapping(address => mapping(address => bool)) private whitelist;
+    mapping(address => mapping(address => bool)) public tokenHolders;
+    mapping(address => uint256) public holderCount;
 
-    // 白名单映射
-    mapping(address => mapping(address => bool)) public whitelist; // 合约地址 -> 地址 -> 是否在白名单
+    event KYCVerified(address indexed user, string indexed verificationId, uint256 timestamp);
+    event KYCDataHashed(address indexed user, string indexed dataHash, uint256 timestamp);
+    event BlacklistUpdated(address indexed user, bool isBlacklisted);
+    event RoleAssigned(address indexed user, Role role);
+    event RoleRevoked(address indexed user, Role role);
+    event AssetRegistered(string indexed assetId, address indexed token, ComplianceStandard standard);
+    event AssetStatusChanged(string indexed assetId, AssetStatus status);
+    event AssetValuationChanged(string indexed assetId, uint256 totalValuation);
+    event AssetLimitsChanged(string indexed assetId, uint256 holderLimit, uint256 maxHoldingPerAccount);
+    event WhitelistUpdated(address indexed token, address indexed user, bool allowed);
+    event JurisdictionAdded(string indexed jurisdiction);
+    event JurisdictionRestricted(string indexed jurisdiction, bool restricted);
+    event AddressJurisdictionUpdated(address indexed user, string indexed jurisdiction);
 
-    // 权限控制
-    address public admin;
-
-    // 修饰符
     modifier onlyAdmin() {
-        require(msg.sender == admin, "Not authorized");
+        require(msg.sender == admin, "Not authorized admin");
         _;
     }
 
-    // 构造函数
-    constructor() {
-        admin = msg.sender;
-        // 初始化默认司法管辖区
-        addJurisdiction("US");
-        addJurisdiction("CN");
-        addJurisdiction("EU");
-        addJurisdiction("JP");
+    modifier onlyRegulator() {
+        require(msg.sender == admin || roles[msg.sender][Role.Regulator], "Not authorized regulator");
+        _;
     }
 
-    // KYC验证相关
-    function verifyKYC(address user, string calldata verificationData) external returns (bool) {
-        // 这里应该集成第三方KYC服务
-        // 暂时模拟验证通过
+    modifier onlyIssuer() {
+        require(msg.sender == admin || roles[msg.sender][Role.Issuer], "Not authorized issuer");
+        _;
+    }
+
+    modifier onlyIssuerOrRegulator() {
+        require(
+            msg.sender == admin || roles[msg.sender][Role.Issuer] || roles[msg.sender][Role.Regulator],
+            "Not authorized compliance operator"
+        );
+        _;
+    }
+
+    constructor() {
+        admin = msg.sender;
+        roles[msg.sender][Role.Issuer] = true;
+        roles[msg.sender][Role.Regulator] = true;
+        _addJurisdiction("US");
+        _addJurisdiction("CN");
+        _addJurisdiction("EU");
+        _addJurisdiction("JP");
+    }
+
+    function verifyKYC(address user, string calldata verificationId) external onlyRegulator returns (bool) {
+        require(user != address(0), "Invalid user");
+        require(bytes(verificationId).length > 0, "Verification ID required");
         kycVerified[user] = true;
-        verificationIds[user] = string(abi.encodePacked("KYC-", uint256(uint160(user))));
-        emit KYCVerified(user, verificationIds[user], block.timestamp);
+        verificationIds[user] = verificationId;
+        emit KYCVerified(user, verificationId, block.timestamp);
         return true;
     }
 
@@ -79,55 +97,70 @@ contract ComplianceEngine is ComplianceRegistry {
         return verificationIds[user];
     }
 
-    // 黑名单管理
-    function addToBlacklist(address address_) external onlyAdmin {
-        blacklisted[address_] = true;
-        emit BlacklistUpdated(address_, true);
+    function setKYCDataHash(address user, string calldata dataHash) external onlyRegulator {
+        require(bytes(dataHash).length > 0, "Data hash required");
+        kycDataHashes[user] = dataHash;
+        emit KYCDataHashed(user, dataHash, block.timestamp);
     }
 
-    function removeFromBlacklist(address address_) external onlyAdmin {
-        blacklisted[address_] = false;
-        emit BlacklistUpdated(address_, false);
+    function getKYCDataHash(address user) external view returns (string memory) {
+        return kycDataHashes[user];
     }
 
-    function isBlacklisted(address address_) external view returns (bool) {
-        return blacklisted[address_];
+    function addToBlacklist(address user) external onlyRegulator {
+        blacklisted[user] = true;
+        emit BlacklistUpdated(user, true);
     }
 
-    // 角色管理
+    function removeFromBlacklist(address user) external onlyRegulator {
+        blacklisted[user] = false;
+        emit BlacklistUpdated(user, false);
+    }
+
+    function isBlacklisted(address user) external view returns (bool) {
+        return blacklisted[user];
+    }
+
     function assignRole(address user, Role role) external onlyAdmin {
+        require(user != address(0), "Invalid user");
         roles[user][role] = true;
         emit RoleAssigned(user, role);
     }
 
     function revokeRole(address user, Role role) external onlyAdmin {
         roles[user][role] = false;
+        emit RoleRevoked(user, role);
     }
 
     function hasRole(address user, Role role) external view returns (bool) {
         return roles[user][role];
     }
 
-    // 司法管辖区管理
-    function addJurisdiction(string calldata jurisdiction) public onlyAdmin {
-        require(!jurisdictions[jurisdiction], "Jurisdiction already exists");
-        jurisdictions[jurisdiction] = true;
-        restrictedJurisdictions[jurisdiction] = false;
+    function addJurisdiction(string calldata jurisdiction) external onlyRegulator {
+        _addJurisdiction(jurisdiction);
+    }
+
+    function _addJurisdiction(string memory jurisdiction) internal {
+        bytes32 key = keccak256(bytes(jurisdiction));
+        require(bytes(jurisdiction).length > 0, "Jurisdiction required");
+        require(!jurisdictions[key], "Jurisdiction already exists");
+        jurisdictions[key] = true;
         emit JurisdictionAdded(jurisdiction);
     }
 
-    function restrictJurisdiction(string calldata jurisdiction, bool restricted) external onlyAdmin {
-        require(jurisdictions[jurisdiction], "Jurisdiction not found");
-        restrictedJurisdictions[jurisdiction] = restricted;
+    function restrictJurisdiction(string calldata jurisdiction, bool restricted) external onlyRegulator {
+        bytes32 key = keccak256(bytes(jurisdiction));
+        require(jurisdictions[key], "Jurisdiction not found");
+        restrictedJurisdictions[key] = restricted;
         emit JurisdictionRestricted(jurisdiction, restricted);
     }
 
     function isJurisdictionRestricted(string calldata jurisdiction) external view returns (bool) {
-        return restrictedJurisdictions[jurisdiction];
+        return restrictedJurisdictions[keccak256(bytes(jurisdiction))];
     }
 
-    function setAddressJurisdiction(address user, string calldata jurisdiction) external onlyAdmin {
-        require(jurisdictions[jurisdiction], "Jurisdiction not found");
+    function setAddressJurisdiction(address user, string calldata jurisdiction) external onlyRegulator {
+        require(jurisdictions[keccak256(bytes(jurisdiction))], "Jurisdiction not found");
         addressJurisdictions[user] = jurisdiction;
         emit AddressJurisdictionUpdated(user, jurisdiction);
     }
@@ -136,167 +169,157 @@ contract ComplianceEngine is ComplianceRegistry {
         return addressJurisdictions[user];
     }
 
-    // 资产管理
-    function registerAsset(string calldata assetId, address contractAddress, ComplianceStandard standard, uint256 totalValuation) external {
+    function registerAsset(
+        string calldata assetId,
+        address token,
+        ComplianceStandard standard,
+        uint256 totalValuation
+    ) external onlyIssuer {
+        require(bytes(assetId).length > 0, "Asset ID required");
+        require(token != address(0), "Invalid token");
+        require(totalValuation > 0, "Valuation required");
         require(bytes(assets[assetId].assetId).length == 0, "Asset already exists");
+        require(bytes(assetIdByToken[token]).length == 0, "Token already registered");
 
         assets[assetId] = Asset({
             assetId: assetId,
-            contractAddress: contractAddress,
+            token: token,
             totalValuation: totalValuation,
             standard: standard,
-            status: AssetStatus.Pending,
-            holderLimit: 100, // 默认持有者上限
-            maxHoldingPerAccount: totalValuation / 10 // 默认最大持仓为总价值的10%
+            status: AssetStatus.Active,
+            holderLimit: 100,
+            maxHoldingPerAccount: totalValuation
         });
-
-        assetIds.push(assetId);
-        emit AssetRegistered(assetId, contractAddress, standard);
+        assetIdByToken[token] = assetId;
+        emit AssetRegistered(assetId, token, standard);
     }
 
-    function updateAssetStatus(string calldata assetId, AssetStatus status) external onlyAdmin {
-        require(bytes(assets[assetId].assetId).length > 0, "Asset not found");
-        assets[assetId].status = status;
+    function updateAssetStatus(string calldata assetId, AssetStatus status) external onlyRegulator {
+        Asset storage asset = _asset(assetId);
+        asset.status = status;
         emit AssetStatusChanged(assetId, status);
     }
 
+    function updateAssetValuation(string calldata assetId, uint256 totalValuation) external onlyIssuer {
+        Asset storage asset = _asset(assetId);
+        if (asset.maxHoldingPerAccount == asset.totalValuation) {
+            asset.maxHoldingPerAccount = totalValuation;
+        }
+        asset.totalValuation = totalValuation;
+        emit AssetValuationChanged(assetId, totalValuation);
+    }
+
     function getAssetStatus(string calldata assetId) external view returns (AssetStatus) {
-        require(bytes(assets[assetId].assetId).length > 0, "Asset not found");
-        return assets[assetId].status;
+        return _asset(assetId).status;
     }
 
-    function getAssetDetails(string calldata assetId) external view returns (
-        address contractAddress,
-        uint256 totalValuation,
-        ComplianceStandard standard,
-        AssetStatus status
-    ) {
-        require(bytes(assets[assetId].assetId).length > 0, "Asset not found");
+    function getAssetDetails(string calldata assetId)
+        external
+        view
+        returns (address token, uint256 totalValuation, ComplianceStandard standard, AssetStatus status)
+    {
+        Asset storage asset = _asset(assetId);
+        return (asset.token, asset.totalValuation, asset.standard, asset.status);
+    }
+
+    function setAssetLimits(string calldata assetId, uint256 holderLimit_, uint256 maxHoldingPerAccount)
+        external
+        onlyRegulator
+    {
+        require(holderLimit_ > 0 && maxHoldingPerAccount > 0, "Invalid limits");
+        Asset storage asset = _asset(assetId);
+        asset.holderLimit = holderLimit_;
+        asset.maxHoldingPerAccount = maxHoldingPerAccount;
+        emit AssetLimitsChanged(assetId, holderLimit_, maxHoldingPerAccount);
+    }
+
+    function setWhitelisted(address token, address user, bool allowed) external onlyIssuerOrRegulator {
+        require(bytes(assetIdByToken[token]).length > 0, "Token not registered");
+        whitelist[token][user] = allowed;
+        emit WhitelistUpdated(token, user, allowed);
+    }
+
+    function isWhitelisted(address token, address user) external view returns (bool) {
+        return whitelist[token][user];
+    }
+
+    function isTransferAllowed(address token, address from, address to, uint256 amount)
+        external
+        view
+        returns (bool, string memory)
+    {
+        string memory assetId = assetIdByToken[token];
+        if (bytes(assetId).length == 0) return (false, "Token not registered");
         Asset storage asset = assets[assetId];
-        return (
-            asset.contractAddress,
-            asset.totalValuation,
-            asset.standard,
-            asset.status
-        );
-    }
+        if (asset.status != AssetStatus.Active) return (false, "Asset is not active");
+        if (to == address(0) || amount == 0) return (false, "Invalid transfer");
+        if (from != address(0)) {
+            (bool senderAllowed, string memory senderReason) = _isIdentityAllowed(token, from, "Sender");
+            if (!senderAllowed) return (false, senderReason);
+        }
+        (bool recipientAllowed, string memory recipientReason) = _isIdentityAllowed(token, to, "Recipient");
+        if (!recipientAllowed) return (false, recipientReason);
 
-    // 设置持有者上限
-    function setHolderLimit(uint256 limit) external onlyAdmin {
-        // 为所有资产设置默认持有者上限
-        for (uint i = 0; i < assetIds.length; i++) {
-            assets[assetIds[i]].holderLimit = limit;
+        uint256 currentHolding = IComplianceBalance(token).balanceOf(to);
+        if (!tokenHolders[token][to] && currentHolding == 0 && holderCount[token] >= asset.holderLimit) {
+            return (false, "Holder limit reached");
         }
-    }
-
-    // 设置单一账户最大持仓限制
-    function setMaxHoldingPerAccount(uint256 limit) external onlyAdmin {
-        // 为所有资产设置默认最大持仓限制
-        for (uint i = 0; i < assetIds.length; i++) {
-            assets[assetIds[i]].maxHoldingPerAccount = limit;
+        if (currentHolding + amount > asset.maxHoldingPerAccount) {
+            return (false, "Exceeds maximum holding per account");
         }
-    }
-
-    // 白名单管理
-    function addToWhitelist(address address_) external onlyAdmin {
-        // 为所有资产合约添加白名单
-        for (uint i = 0; i < assetIds.length; i++) {
-            string memory assetId = assetIds[i];
-            whitelist[assets[assetId].contractAddress][address_] = true;
-        }
-    }
-
-    function removeFromWhitelist(address address_) external onlyAdmin {
-        // 从所有资产合约中移除白名单
-        for (uint i = 0; i < assetIds.length; i++) {
-            string memory assetId = assetIds[i];
-            whitelist[assets[assetId].contractAddress][address_] = false;
-        }
-    }
-
-    function isWhitelisted(address address_) external view returns (bool) {
-        // 检查是否在任何资产合约的白名单中
-        for (uint i = 0; i < assetIds.length; i++) {
-            string memory assetId = assetIds[i];
-            if (whitelist[assets[assetId].contractAddress][address_]) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    // 合规规则检查
-    function isTransferAllowed(address from, address to, uint256 amount) external view returns (bool, string memory) {
-        // 检查发送方和接收方是否在黑名单
-        if (blacklisted[from]) {
-            return (false, "Sender is blacklisted");
-        }
-        if (blacklisted[to]) {
-            return (false, "Recipient is blacklisted");
-        }
-
-        // 检查发送方和接收方是否通过KYC
-        if (!kycVerified[from]) {
-            return (false, "Sender KYC not verified");
-        }
-        if (!kycVerified[to]) {
-            return (false, "Recipient KYC not verified");
-        }
-
-        // 检查司法管辖区合规性
-        string memory fromJurisdiction = addressJurisdictions[from];
-        string memory toJurisdiction = addressJurisdictions[to];
-        
-        if (bytes(fromJurisdiction).length == 0) {
-            return (false, "Sender jurisdiction not set");
-        }
-        if (bytes(toJurisdiction).length == 0) {
-            return (false, "Recipient jurisdiction not set");
-        }
-        
-        if (restrictedJurisdictions[fromJurisdiction]) {
-            return (false, "Sender jurisdiction is restricted");
-        }
-        if (restrictedJurisdictions[toJurisdiction]) {
-            return (false, "Recipient jurisdiction is restricted");
-        }
-
-        // 这里应该根据具体的代币合约地址获取资产信息
-        // 暂时使用第一个资产进行演示
-        if (assetIds.length > 0) {
-            string memory assetId = assetIds[0];
-            Asset storage asset = assets[assetId];
-
-            // 检查白名单
-            if (!whitelist[asset.contractAddress][from] || !whitelist[asset.contractAddress][to]) {
-                return (false, "Address not in whitelist");
-            }
-
-            // 检查持有者数量上限
-            if (!tokenHolders[asset.contractAddress][to] && holderCount[asset.contractAddress] >= asset.holderLimit) {
-                return (false, "Holder limit reached");
-            }
-
-            // 检查单一账户最大持仓限制
-            // 这里应该获取实际的持仓数量，暂时模拟
-            uint256 currentHolding = 0; // 实际项目中应该从代币合约获取
-            if (currentHolding + amount > asset.maxHoldingPerAccount) {
-                return (false, "Exceeds maximum holding per account");
-            }
-        }
-
         return (true, "Transfer allowed");
     }
 
-    // 更新代币持有者信息
-    function updateTokenHolder(address contractAddress, address holder, bool isHolder) external {
-        // 这里应该只有代币合约可以调用
-        if (isHolder && !tokenHolders[contractAddress][holder]) {
-            tokenHolders[contractAddress][holder] = true;
-            holderCount[contractAddress]++;
-        } else if (!isHolder && tokenHolders[contractAddress][holder]) {
-            tokenHolders[contractAddress][holder] = false;
-            holderCount[contractAddress]--;
+    function _isIdentityAllowed(address token, address user, string memory label)
+        internal
+        view
+        returns (bool, string memory)
+    {
+        if (blacklisted[user]) return (false, string.concat(label, " is blacklisted"));
+        if (!kycVerified[user]) return (false, string.concat(label, " KYC not verified"));
+        string memory jurisdiction = addressJurisdictions[user];
+        if (bytes(jurisdiction).length == 0) return (false, string.concat(label, " jurisdiction not set"));
+        if (restrictedJurisdictions[keccak256(bytes(jurisdiction))]) {
+            return (false, string.concat(label, " jurisdiction is restricted"));
         }
+        if (!whitelist[token][user]) return (false, "Address not in whitelist");
+        return (true, "");
+    }
+
+    function transferred(address from, address to) external {
+        _requireRegisteredToken(msg.sender);
+        _syncHolder(msg.sender, from);
+        _syncHolder(msg.sender, to);
+    }
+
+    function created(address to) external {
+        _requireRegisteredToken(msg.sender);
+        _syncHolder(msg.sender, to);
+    }
+
+    function destroyed(address from) external {
+        _requireRegisteredToken(msg.sender);
+        _syncHolder(msg.sender, from);
+    }
+
+    function _syncHolder(address token, address holder) internal {
+        if (holder == address(0)) return;
+        bool hasBalance = IComplianceBalance(token).balanceOf(holder) > 0;
+        if (hasBalance && !tokenHolders[token][holder]) {
+            tokenHolders[token][holder] = true;
+            holderCount[token] += 1;
+        } else if (!hasBalance && tokenHolders[token][holder]) {
+            tokenHolders[token][holder] = false;
+            holderCount[token] -= 1;
+        }
+    }
+
+    function _requireRegisteredToken(address token) internal view {
+        require(bytes(assetIdByToken[token]).length > 0, "Caller is not a registered token");
+    }
+
+    function _asset(string memory assetId) internal view returns (Asset storage asset) {
+        asset = assets[assetId];
+        require(bytes(asset.assetId).length > 0, "Asset not found");
     }
 }

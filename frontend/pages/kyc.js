@@ -8,7 +8,9 @@ export default function KYC() {
     firstName: '',
     lastName: '',
     email: '',
-    dob: ''
+    dob: '',
+    passport: '',
+    idCard: ''
   })
   const [verificationId, setVerificationId] = useState('')
   const [status, setStatus] = useState('')
@@ -54,6 +56,12 @@ export default function KYC() {
         setStatus('error')
         return
       }
+    const storedUser = JSON.parse(localStorage.getItem('user') || 'null')
+    if (!storedUser?.address || storedUser.address.toLowerCase() !== account.toLowerCase()) {
+      setMessage('Connected wallet must match the authenticated account')
+      setStatus('error')
+      return
+    }
     setLoading(true)
     setMessage('')
 
@@ -73,7 +81,6 @@ export default function KYC() {
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
-          userAddress: account,
           verificationData: JSON.stringify(formData)
         })
       })
@@ -221,6 +228,36 @@ Connect Wallet
                     onChange={handleInputChange}
                     required
                     className="form-control"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="passport" className="form-label">
+                    Passport Number (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    id="passport"
+                    name="passport"
+                    value={formData.passport}
+                    onChange={handleInputChange}
+                    className="form-control"
+                    placeholder="Enter your passport number"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="idCard" className="form-label">
+                    ID Card Number (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    id="idCard"
+                    name="idCard"
+                    value={formData.idCard}
+                    onChange={handleInputChange}
+                    className="form-control"
+                    placeholder="Enter your ID card number"
                   />
                 </div>
 

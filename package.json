@@ -4,7 +4,7 @@
   "description": "RWA Compliance Gateway Smart Contracts",
   "main": "index.js",
   "scripts": {
-    "test": "npx hardhat test",
+    "test": "hardhat test test/contracts/*.test.js",
     "deploy:local": "npx hardhat run scripts/deploy.js",
     "deploy:goerli": "npx hardhat run scripts/deploy.js --network goerli",
     "deploy:sepolia": "npx hardhat run scripts/deploy.js --network sepolia"

@@ -31,38 +31,35 @@ func RegisterRoutes(r *gin.Engine) {
 			{
 				compliance.POST("/verify", VerifyKYC)
 				compliance.GET("/status", GetKYCStatus)
-				// 制裁名单管理
-compliance.GET("/sanction-list", GetSanctionList)
-compliance.POST("/sanction-list", GetSanctionList)
-compliance.POST("/sync-sanction-list", SyncSanctionList)
-				// 司法管辖区管理
-				compliance.POST("/jurisdiction", AddJurisdiction)
-				compliance.PUT("/jurisdiction/restrict", RestrictJurisdiction)
-				compliance.POST("/address-jurisdiction", SetAddressJurisdiction)
 				compliance.GET("/address-jurisdiction", GetAddressJurisdiction)
+				compliance.GET("/sanction-list", RequireRoles("regulator"), GetSanctionList)
+				compliance.POST("/sanction-list", RequireRoles("regulator"), GetSanctionList)
+				compliance.POST("/jurisdiction", RequireRoles("regulator"), AddJurisdiction)
+				compliance.PUT("/jurisdiction/restrict", RequireRoles("regulator"), RestrictJurisdiction)
+				compliance.POST("/address-jurisdiction", RequireRoles("regulator"), SetAddressJurisdiction)
 			}
 
 			// 资产相关路由
 			assets := authGroup.Group("/assets")
 			{
 				assets.GET("/audit-trail", GetAssetAuditTrail)
-			assets.GET("/list", GetAssets)
-			assets.GET("/details", GetAssetDetails)
-			assets.GET("/balances", GetUserBalances)
-			assets.GET("/total-balance", GetAssetTotalBalance)
-			assets.POST("/create", CreateAsset)
-				assets.POST("/deposit", DepositAsset)
-				assets.POST("/redeem", RedeemAsset)
-				assets.POST("/transfer", TransferAsset)
-				assets.POST("/freeze", FreezeAsset)
-				assets.POST("/unfreeze", UnfreezeAsset)
-				assets.POST("/deactivate", DeactivateAsset)
+				assets.GET("/list", GetAssetsSecure)
+				assets.GET("/details", GetAssetDetailsSecure)
+				assets.GET("/balances", GetUserBalancesSecure)
+				assets.GET("/total-balance", GetAssetTotalBalanceSecure)
+				assets.POST("/create", RequireRoles("issuer"), CreateAssetSecure)
+				assets.POST("/deposit", DepositAssetSecure)
+				assets.POST("/redeem", RedeemAssetSecure)
+				assets.POST("/transfer", TransferAssetSecure)
+				assets.POST("/freeze", RequireRoles("custodian", "regulator"), FreezeAsset)
+				assets.POST("/unfreeze", RequireRoles("custodian", "regulator"), UnfreezeAsset)
+				assets.POST("/deactivate", RequireRoles("regulator"), DeactivateAsset)
 			}
 		}
 
 		// 需要管理员权限的路由
 		adminGroup := v1.Group("/admin")
-		adminGroup.Use(RoleMiddleware("admin"))
+		adminGroup.Use(AuthMiddleware(), RequireRoles("admin"))
 		{
 			// 这里可以添加需要管理员权限的路由
 		}

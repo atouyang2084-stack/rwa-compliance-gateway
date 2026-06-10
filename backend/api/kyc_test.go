@@ -1,129 +1,86 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"rwaGateway/internal/database"
-
 	"github.com/gin-gonic/gin"
-	"github.com/stretchr/testify/assert"
+
+	"rwaGateway/internal/database"
 )
 
-// 测试KYC状态查询
-func TestGetKYCStatus(t *testing.T) {
-	// 初始化数据库
-	database.InitDatabase("./test.db")
-	defer database.Close()
+func TestKYCStatusUsesAuthenticatedWallet(t *testing.T) {
+	setupTestDatabase(t)
+	createVerifiedUser(t, "alice", aliceAddress)
+	createVerifiedUser(t, "bob", bobAddress)
+	require.NoError(t, database.UpdateKYCVerified(bobAddress, false))
 
-	// 创建测试用户
-	userAddress := "0x1111111111111111111111111111111111111111"
-	
-	// 模拟用户已完成KYC验证
-	err := database.UpdateKYCVerified(userAddress, true)
-	assert.NoError(t, err)
+	router := contextRouter("investor", aliceAddress)
+	router.GET("/status", GetKYCStatus)
+	request := httptest.NewRequest(http.MethodGet, "/status?address="+bobAddress, nil)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
 
-	// 设置路由
-	r := gin.Default()
-	r.GET("/v1/compliance/status", GetKYCStatus)
-
-	// 构造请求
-	req, _ := http.NewRequest("GET", "/v1/compliance/status?address="+userAddress, nil)
-	req.Header.Set("Authorization", "Bearer test-token")
-
-	// 记录响应
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	// 验证响应
-	assert.Equal(t, http.StatusOK, w.Code)
-
-	// 解析响应
-	var response map[string]interface{}
-	err = json.Unmarshal(w.Body.Bytes(), &response)
-	assert.NoError(t, err)
-
-	// 验证KYC状态为已验证
-	assert.True(t, response["verified"].(bool), "KYC状态应该为已验证")
-	assert.Equal(t, userAddress, response["address"].(string))
-
-	t.Log("测试通过：KYC状态查询正常")
+	require.Equal(t, http.StatusOK, response.Code)
+	require.Contains(t, response.Body.String(), aliceAddress)
+	require.Contains(t, response.Body.String(), `"verified":true`)
 }
 
-// 测试未完成KYC验证的用户
-func TestGetKYCStatus_NotVerified(t *testing.T) {
-	// 初始化数据库
-	database.InitDatabase("./test.db")
-	defer database.Close()
-
-	// 创建测试用户（未完成KYC）
-	userAddress := "0x2222222222222222222222222222222222222222"
-	
-	// 确保用户未完成KYC验证
-	err := database.UpdateKYCVerified(userAddress, false)
-	assert.NoError(t, err)
-
-	// 设置路由
-	r := gin.Default()
-	r.GET("/v1/compliance/status", GetKYCStatus)
-
-	// 构造请求
-	req, _ := http.NewRequest("GET", "/v1/compliance/status?address="+userAddress, nil)
-	req.Header.Set("Authorization", "Bearer test-token")
-
-	// 记录响应
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	// 验证响应
-	assert.Equal(t, http.StatusOK, w.Code)
-
-	// 解析响应
-	var response map[string]interface{}
-	err = json.Unmarshal(w.Body.Bytes(), &response)
-	assert.NoError(t, err)
-
-	// 验证KYC状态为未验证
-	assert.False(t, response["verified"].(bool), "KYC状态应该为未验证")
-	assert.Equal(t, userAddress, response["address"].(string))
-
-	t.Log("测试通过：未验证用户的KYC状态查询正常")
+func TestAuthenticatedAddressIsRequired(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.GET("/status", GetKYCStatus)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/status", nil))
+	require.Equal(t, http.StatusUnauthorized, response.Code)
 }
 
-// 测试测试模式下的KYC验证（所有用户都通过）
-func TestGetKYCStatus_TestMode(t *testing.T) {
-	// 初始化数据库
-	database.InitDatabase("./test.db")
-	defer database.Close()
+func TestJurisdictionStateIsPersistedForAuthenticatedWallet(t *testing.T) {
+	setupTestDatabase(t)
+	createVerifiedUser(t, "alice", aliceAddress)
+	_, err := database.SetAddressJurisdiction(aliceAddress, "US")
+	require.NoError(t, err)
 
-	// 测试模式下，即使数据库中没有记录，也应该返回已验证
-	userAddress := "0x3333333333333333333333333333333333333333"
+	router := contextRouter("investor", aliceAddress)
+	router.GET("/jurisdiction", GetAddressJurisdiction)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/jurisdiction?address="+bobAddress, nil))
+	require.Equal(t, http.StatusOK, response.Code)
+	require.Contains(t, response.Body.String(), aliceAddress)
+	require.Contains(t, response.Body.String(), `"jurisdiction":"US"`)
+}
 
-	// 设置路由
-	r := gin.Default()
-	r.GET("/v1/compliance/status", GetKYCStatus)
+func TestDemoKYCUsesAuthenticatedWallet(t *testing.T) {
+	t.Setenv("KYC_MODE", "demo")
+	setupTestDatabase(t)
+	createVerifiedUser(t, "alice", aliceAddress)
+	require.NoError(t, database.UpdateKYCVerified(aliceAddress, false))
 
-	// 构造请求
-	req, _ := http.NewRequest("GET", "/v1/compliance/status?address="+userAddress, nil)
-	req.Header.Set("Authorization", "Bearer test-token")
+	router := contextRouter("investor", aliceAddress)
+	router.POST("/verify", VerifyKYC)
+	verificationData, _ := json.Marshal(map[string]string{
+		"firstName": "Alice",
+		"lastName":  "Investor",
+		"email":     "alice@example.com",
+		"dob":       "1990-01-01",
+		"passport":  "P123456789",
+	})
+	payload, _ := json.Marshal(map[string]string{
+		"userAddress":      bobAddress,
+		"verificationData": string(verificationData),
+	})
+	request := httptest.NewRequest(http.MethodPost, "/verify", bytes.NewReader(payload))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
 
-	// 记录响应
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	// 验证响应
-	assert.Equal(t, http.StatusOK, w.Code)
-
-	// 解析响应
-	var response map[string]interface{}
-	err := json.Unmarshal(w.Body.Bytes(), &response)
-	assert.NoError(t, err)
-
-	// 测试模式下应该返回已验证
-	assert.True(t, response["verified"].(bool), "测试模式下所有用户都应该通过KYC验证")
-	assert.Equal(t, userAddress, response["address"].(string))
-
-	t.Log("测试通过：测试模式下KYC验证正常")
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	require.Contains(t, response.Body.String(), aliceAddress)
+	require.Contains(t, response.Body.String(), "DEMO-KYC-")
+	aliceVerified, err := database.GetKYCVerified(aliceAddress)
+	require.NoError(t, err)
+	require.Equal(t, true, aliceVerified)
 }

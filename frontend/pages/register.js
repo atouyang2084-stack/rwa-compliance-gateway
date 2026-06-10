@@ -7,7 +7,6 @@ export default function Register() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [address, setAddress] = useState('')
-  const [role, setRole] = useState('investor')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -22,7 +21,7 @@ export default function Register() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ username, email, password, address, role }),
+        body: JSON.stringify({ username, email, password, address }),
       })
 
       const data = await response.json()
@@ -56,30 +55,40 @@ export default function Register() {
               <div className="nav-brand-name">RWA Compliance Gateway</div>
             </div>
             <div className="nav-links">
-              <Link href="/" className="nav-link">Home</Link>
-              <Link href="/kyc" className="nav-link">KYC Verification</Link>
-              <Link href="/assets" className="nav-link">Asset Management</Link>
-              <Link href="/login" className="btn btn-primary">Login</Link>
+              <div className="flex items-center gap-6">
+                <Link href="/" className="nav-link">Home</Link>
+                <Link href="/kyc" className="nav-link">KYC Verification</Link>
+                <Link href="/assets" className="nav-link">Asset Management</Link>
+              </div>
+              <div className="flex items-center gap-4">
+                <Link href="/login" className="btn btn-primary">Login</Link>
+              </div>
             </div>
           </div>
         </div>
       </nav>
 
       {/* 注册表单 */}
-      <section className="py-16 bg-white">
+      <section className="py-20 bg-gray-light">
         <div className="container">
           <div className="max-w-md mx-auto">
-            <div className="banking-card p-8">
-              <h2 className="text-2xl font-bold mb-6 text-center text-primary-dark">User Registration</h2>
+            <div className="banking-card p-8 shadow-lg hover-lift">
+              <div className="text-center mb-8">
+                <div className="w-16 h-16 bg-primary-light bg-opacity-10 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <span className="text-2xl font-bold text-primary-color">👤</span>
+                </div>
+                <h2 className="text-2xl font-bold text-primary-dark">User Registration</h2>
+                <p className="text-gray-color mt-2">Create a new account to get started</p>
+              </div>
               
               {error && (
-                <div className="alert alert-error mb-4">
+                <div className="alert alert-error mb-6">
                   {error}
                 </div>
               )}
               
               <form onSubmit={handleRegister}>
-                <div className="form-group mb-4">
+                <div className="form-group mb-6">
                   <label htmlFor="username" className="form-label">Username</label>
                   <input
                     type="text"
@@ -88,10 +97,11 @@ export default function Register() {
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
                     required
+                    placeholder="Enter your username"
                   />
                 </div>
                 
-                <div className="form-group mb-4">
+                <div className="form-group mb-6">
                   <label htmlFor="email" className="form-label">Email</label>
                   <input
                     type="email"
@@ -100,10 +110,11 @@ export default function Register() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
+                    placeholder="Enter your email"
                   />
                 </div>
                 
-                <div className="form-group mb-4">
+                <div className="form-group mb-6">
                   <label htmlFor="password" className="form-label">Password</label>
                   <input
                     type="password"
@@ -113,10 +124,11 @@ export default function Register() {
                     onChange={(e) => setPassword(e.target.value)}
                     required
                     minLength={6}
+                    placeholder="Enter your password"
                   />
                 </div>
                 
-                <div className="form-group mb-4">
+                <div className="form-group mb-6">
                   <label htmlFor="address" className="form-label">Wallet Address</label>
                   <input
                     type="text"
@@ -129,32 +141,17 @@ export default function Register() {
                   />
                 </div>
                 
-                <div className="form-group mb-6">
-                  <label htmlFor="role" className="form-label">Role</label>
-                  <select
-                    id="role"
-                    className="form-input"
-                    value={role}
-                    onChange={(e) => setRole(e.target.value)}
-                  >
-                    <option value="investor">Investor</option>
-                    <option value="issuer">Issuer</option>
-                    <option value="custodian">Custodian</option>
-                    <option value="regulator">Regulator</option>
-                  </select>
-                </div>
-                
                 <button 
                   type="submit" 
-                  className="btn btn-primary w-full" 
+                  className="btn btn-primary w-full py-3"
                   disabled={loading}
                 >
                   {loading ? 'Registering...' : 'Register'}
                 </button>
                 
-                <div className="text-center mt-4">
+                <div className="text-center mt-6">
                   <p className="text-gray-color">
-                    Already have an account? <Link href="/login" className="text-primary-color hover:underline">Login now</Link>
+                    Already have an account? <Link href="/login" className="text-primary-color hover:underline font-medium">Login now</Link>
                   </p>
                 </div>
               </form>

@@ -1,15 +1,22 @@
 package services
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
-	"fmt"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 
 	"rwaGateway/internal/database"
+)
+
+var (
+	fallbackSecretOnce sync.Once
+	fallbackSecret     string
 )
 
 // AuthService 认证服务
@@ -21,7 +28,14 @@ type AuthService struct {
 func NewAuthService() *AuthService {
 	jwtSecret := os.Getenv("JWT_SECRET")
 	if jwtSecret == "" {
-		jwtSecret = "default_jwt_secret_for_development"
+		fallbackSecretOnce.Do(func() {
+			buffer := make([]byte, 32)
+			if _, err := rand.Read(buffer); err != nil {
+				panic("unable to initialize JWT signing secret")
+			}
+			fallbackSecret = hex.EncodeToString(buffer)
+		})
+		jwtSecret = fallbackSecret
 	}
 	return &AuthService{
 		jwtSecret: jwtSecret,
@@ -58,30 +72,17 @@ func (s *AuthService) RegisterUser(username, email, password, address, role stri
 
 // LoginUser 用户登录
 func (s *AuthService) LoginUser(username, password string) (string, *database.User, error) {
-	// 打印登录信息以便调试
-	fmt.Printf("Login attempt for user: %s\n", username)
-	
 	// 获取用户
 	user, err := database.GetUserByUsername(username)
 	if err != nil {
-		// 打印错误信息以便调试
-		fmt.Printf("GetUserByUsername error: %v\n", err)
 		return "", nil, errors.New("invalid username or password")
 	}
-
-	// 打印用户信息以便调试
-	fmt.Printf("User found: %s, Password hash: %s\n", user.Username, user.PasswordHash)
 
 	// 验证密码
 	err = bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password))
 	if err != nil {
-		// 打印错误信息以便调试
-		fmt.Printf("Password verification error: %v\n", err)
 		return "", nil, errors.New("invalid username or password")
 	}
-	
-	// 打印密码验证成功信息
-	fmt.Printf("Password verification successful for user: %s\n", username)
 
 	// 生成JWT令牌
 	token, err := s.GenerateToken(user)
@@ -101,6 +102,7 @@ func (s *AuthService) GenerateToken(user *database.User) (string, error) {
 		"email":    user.Email,
 		"address":  user.Address,
 		"role":     user.Role,
+		"iat":      time.Now().Unix(),
 		"exp":      time.Now().Add(time.Hour * 24 * 7).Unix(), // 7天过期
 	}
 
@@ -121,7 +123,7 @@ func (s *AuthService) ValidateToken(tokenString string) (jwt.MapClaims, error) {
 	// 解析令牌
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 		// 验证签名方法
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+		if token.Method.Alg() != jwt.SigningMethodHS256.Alg() {
 			return nil, errors.New("unexpected signing method")
 		}
 		return []byte(s.jwtSecret), nil

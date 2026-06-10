@@ -56,30 +56,40 @@ export default function Login() {
               <div className="nav-brand-name">RWA Compliance Gateway</div>
             </div>
             <div className="nav-links">
-              <Link href="/" className="nav-link">Home</Link>
-              <Link href="/kyc" className="nav-link">KYC Verification</Link>
-              <Link href="/assets" className="nav-link">Asset Management</Link>
-              <Link href="/register" className="btn btn-outline">Register</Link>
+              <div className="flex items-center gap-6">
+                <Link href="/" className="nav-link">Home</Link>
+                <Link href="/kyc" className="nav-link">KYC Verification</Link>
+                <Link href="/assets" className="nav-link">Asset Management</Link>
+              </div>
+              <div className="flex items-center gap-4">
+                <Link href="/register" className="btn btn-outline">Register</Link>
+              </div>
             </div>
           </div>
         </div>
       </nav>
 
       {/* 登录表单 */}
-      <section className="py-16 bg-white">
+      <section className="py-20 bg-gray-light">
         <div className="container">
           <div className="max-w-md mx-auto">
-            <div className="banking-card p-8">
-              <h2 className="text-2xl font-bold mb-6 text-center text-primary-dark">User Login</h2>
+            <div className="banking-card p-8 shadow-lg hover-lift">
+              <div className="text-center mb-8">
+                <div className="w-16 h-16 bg-primary-light bg-opacity-10 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <span className="text-2xl font-bold text-primary-color">🔐</span>
+                </div>
+                <h2 className="text-2xl font-bold text-primary-dark">User Login</h2>
+                <p className="text-gray-color mt-2">Sign in to access your account</p>
+              </div>
               
               {error && (
-                <div className="alert alert-error mb-4">
+                <div className="alert alert-error mb-6">
                   {error}
                 </div>
               )}
               
               <form onSubmit={handleLogin}>
-                <div className="form-group mb-4">
+                <div className="form-group mb-6">
                   <label htmlFor="username" className="form-label">Username</label>
                   <input
                     type="text"
@@ -88,11 +98,15 @@ export default function Login() {
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
                     required
+                    placeholder="Enter your username"
                   />
                 </div>
                 
-                <div className="form-group mb-6">
-                  <label htmlFor="password" className="form-label">Password</label>
+                <div className="form-group mb-8">
+                  <div className="flex justify-between items-center mb-2">
+                    <label htmlFor="password" className="form-label">Password</label>
+                    <Link href="#" className="text-sm text-primary-color hover:underline">Forgot password?</Link>
+                  </div>
                   <input
                     type="password"
                     id="password"
@@ -100,20 +114,21 @@ export default function Login() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
+                    placeholder="Enter your password"
                   />
                 </div>
                 
                 <button 
                   type="submit" 
-                  className="btn btn-primary w-full" 
+                  className="btn btn-primary w-full py-3"
                   disabled={loading}
                 >
                   {loading ? 'Logging in...' : 'Login'}
                 </button>
                 
-                <div className="text-center mt-4">
+                <div className="text-center mt-6">
                   <p className="text-gray-color">
-                    Don't have an account? <Link href="/register" className="text-primary-color hover:underline">Register now</Link>
+                    Don't have an account? <Link href="/register" className="text-primary-color hover:underline font-medium">Register now</Link>
                   </p>
                 </div>
               </form>
