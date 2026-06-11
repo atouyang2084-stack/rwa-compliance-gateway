@@ -1,5 +1,7 @@
 # RWA Compliance Gateway
 
+[![CI](https://github.com/atouyang2084-stack/rwa-compliance-gateway/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/atouyang2084-stack/rwa-compliance-gateway/actions/workflows/ci.yml)
+
 一个面向 RWA 数字资产发行、合规准入和风险控制的全栈 MVP。项目包含
 Next.js 前端、Go API、SQLite 原子账本，以及 ERC-3643-aligned Solidity
 合约套件，可用于完整展示身份验证、资产创建、申购、转账、赎回、冻结与审计流程。
