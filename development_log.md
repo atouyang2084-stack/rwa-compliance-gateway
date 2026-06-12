@@ -1,5 +1,23 @@
 # RWA Compliance Gateway 开发日志
 
+## 2026-06-12：供应权限 P0 修复
+
+### Solidity
+
+- `RWAToken` 新增 immutable `supplyController`
+- `mint` 和 `burnFrom` 仅允许绑定的 `AssetManager` 调用
+- 移除持有人公开 `burn`，赎回统一经过 `AssetManager.redeem`
+- `ComplianceEngine` 将资产估值和白名单权限绑定到具体资产 Manager
+- 资产注册时校验注册者与 Token 供应控制器一致
+- `checkPegStatus` 同时核对估值、内部份额和 Token `totalSupply`
+
+### 防御性验证
+
+- 全局 Issuer/Admin 直接 mint 和 burnFrom 均被拒绝
+- 非控制器无法注册 Token，跨资产估值和白名单写入被拒绝
+- 随机化存入/赎回序列持续验证三账供应不变量
+- Hardhat：16 tests passing
+
 ## 2026-06-10：MVP 安全重构完成
 
 ### 前端

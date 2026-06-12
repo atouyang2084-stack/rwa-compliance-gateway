@@ -18,6 +18,8 @@ Next.js 前端、Go API、SQLite 原子账本，以及 ERC-3643-aligned Solidity
 - 全链路最小单位整数字符串金额，前端使用 `BigInt`，后端限制在 `uint256`
 - 原子余额变更、请求 Nonce 防重放和 SHA-256 前向哈希审计链
 - 按 Token 隔离的 KYC、黑名单、白名单、持仓上限和持有人数量控制
+- 每个 Token 永久绑定唯一 `AssetManager` 供应控制器，Issuer 无法直接增发或销毁
+- 资产估值、内部份额和 Token `totalSupply` 三账一致性检查
 - Hardhat 合约部署与防御性测试
 
 ## 架构
@@ -32,7 +34,7 @@ flowchart LR
     L --> H["Hash-chained Audit Log"]
     B -. "Optional KYC hash anchoring" .-> E["ComplianceEngine"]
     F -. "Configured contract addresses" .-> M["AssetManager"]
-    M --> T["RWAToken"]
+    M -->|"exclusive mint / burnFrom"| T["RWAToken"]
     M --> O["OracleManager"]
     T --> E
 ```
@@ -53,8 +55,8 @@ backend/
 contracts/
   ComplianceEngine.sol         身份、角色、辖区、名单和转账规则
   ComplianceRegistry.sol       合规接口与枚举
-  RWAToken.sol                 2 位小数的许可型代币
-  AssetManager.sol             资产生命周期和价值/供应量锚定
+  RWAToken.sol                 绑定唯一供应控制器的 2 位小数许可型代币
+  AssetManager.sol             资产生命周期和三账供应量锚定
   OracleManager.sol            受控估值数据
 frontend/
   lib/amounts.js               BigInt 金额转换与显示
@@ -229,9 +231,10 @@ npm test
 
 - 非授权 KYC、角色、铸币和持有人状态写入
 - 未注册 Token 绕过和跨 Token 状态污染
+- 全局 Issuer 直接 mint/burnFrom、公开 burn 和跨资产权限绕过
 - 黑名单、KYC、白名单、暂停和账户持仓上限
 - 2 位小数最小单位、Allowance 与精确余额
-- 资产创建、估值/供应量同步、申购、转账、赎回和冻结
+- 资产创建、估值/内部份额/Token 供应量不变量、申购、转账、赎回和冻结
 
 ### 本地部署
 
@@ -245,6 +248,9 @@ npx hardhat run scripts/deploy.js --network hardhat
 - `OracleManager`
 - `AssetManager`
 - Demo `RWAToken`
+
+本次供应控制器修复修改了 `RWAToken` 构造参数和权限模型。任何旧测试网部署
+都不会自动获得该修复，必须重新部署整套合约，并更新前端和后端配置中的合约地址。
 
 ### Sepolia
 
@@ -289,10 +295,10 @@ cd frontend
 npm run build
 ```
 
-截至 2026-06-10：
+截至 2026-06-12：
 
 - Go 测试与 `go vet` 通过
-- Hardhat：10 个合约测试通过
+- Hardhat：16 个合约测试通过
 - Hardhat 本地完整部署通过
 - Next.js 生产构建通过
 - 注册页桌面与 390 x 844 移动端响应式检查通过

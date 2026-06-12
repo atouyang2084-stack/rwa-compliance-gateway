@@ -7,6 +7,10 @@ interface IComplianceBalance {
     function balanceOf(address user) external view returns (uint256);
 }
 
+interface ISupplyControlledToken {
+    function supplyController() external view returns (address);
+}
+
 contract ComplianceEngine is ComplianceRegistry {
     struct Asset {
         string assetId;
@@ -16,6 +20,7 @@ contract ComplianceEngine is ComplianceRegistry {
         AssetStatus status;
         uint256 holderLimit;
         uint256 maxHoldingPerAccount;
+        address manager;
     }
 
     address public immutable admin;
@@ -39,6 +44,7 @@ contract ComplianceEngine is ComplianceRegistry {
     event RoleAssigned(address indexed user, Role role);
     event RoleRevoked(address indexed user, Role role);
     event AssetRegistered(string indexed assetId, address indexed token, ComplianceStandard standard);
+    event AssetManagerBound(string indexed assetId, address indexed token, address indexed manager);
     event AssetStatusChanged(string indexed assetId, AssetStatus status);
     event AssetValuationChanged(string indexed assetId, uint256 totalValuation);
     event AssetLimitsChanged(string indexed assetId, uint256 holderLimit, uint256 maxHoldingPerAccount);
@@ -59,14 +65,6 @@ contract ComplianceEngine is ComplianceRegistry {
 
     modifier onlyIssuer() {
         require(msg.sender == admin || roles[msg.sender][Role.Issuer], "Not authorized issuer");
-        _;
-    }
-
-    modifier onlyIssuerOrRegulator() {
-        require(
-            msg.sender == admin || roles[msg.sender][Role.Issuer] || roles[msg.sender][Role.Regulator],
-            "Not authorized compliance operator"
-        );
         _;
     }
 
@@ -180,6 +178,7 @@ contract ComplianceEngine is ComplianceRegistry {
         require(totalValuation > 0, "Valuation required");
         require(bytes(assets[assetId].assetId).length == 0, "Asset already exists");
         require(bytes(assetIdByToken[token]).length == 0, "Token already registered");
+        require(ISupplyControlledToken(token).supplyController() == msg.sender, "Caller is not token controller");
 
         assets[assetId] = Asset({
             assetId: assetId,
@@ -188,10 +187,12 @@ contract ComplianceEngine is ComplianceRegistry {
             standard: standard,
             status: AssetStatus.Active,
             holderLimit: 100,
-            maxHoldingPerAccount: totalValuation
+            maxHoldingPerAccount: totalValuation,
+            manager: msg.sender
         });
         assetIdByToken[token] = assetId;
         emit AssetRegistered(assetId, token, standard);
+        emit AssetManagerBound(assetId, token, msg.sender);
     }
 
     function updateAssetStatus(string calldata assetId, AssetStatus status) external onlyRegulator {
@@ -200,8 +201,9 @@ contract ComplianceEngine is ComplianceRegistry {
         emit AssetStatusChanged(assetId, status);
     }
 
-    function updateAssetValuation(string calldata assetId, uint256 totalValuation) external onlyIssuer {
+    function updateAssetValuation(string calldata assetId, uint256 totalValuation) external {
         Asset storage asset = _asset(assetId);
+        require(msg.sender == asset.manager, "Not asset manager");
         if (asset.maxHoldingPerAccount == asset.totalValuation) {
             asset.maxHoldingPerAccount = totalValuation;
         }
@@ -222,6 +224,10 @@ contract ComplianceEngine is ComplianceRegistry {
         return (asset.token, asset.totalValuation, asset.standard, asset.status);
     }
 
+    function getAssetManager(string calldata assetId) external view returns (address) {
+        return _asset(assetId).manager;
+    }
+
     function setAssetLimits(string calldata assetId, uint256 holderLimit_, uint256 maxHoldingPerAccount)
         external
         onlyRegulator
@@ -233,8 +239,13 @@ contract ComplianceEngine is ComplianceRegistry {
         emit AssetLimitsChanged(assetId, holderLimit_, maxHoldingPerAccount);
     }
 
-    function setWhitelisted(address token, address user, bool allowed) external onlyIssuerOrRegulator {
-        require(bytes(assetIdByToken[token]).length > 0, "Token not registered");
+    function setWhitelisted(address token, address user, bool allowed) external {
+        string memory assetId = assetIdByToken[token];
+        require(bytes(assetId).length > 0, "Token not registered");
+        require(
+            msg.sender == assets[assetId].manager || msg.sender == admin || roles[msg.sender][Role.Regulator],
+            "Not authorized for asset"
+        );
         whitelist[token][user] = allowed;
         emit WhitelistUpdated(token, user, allowed);
     }

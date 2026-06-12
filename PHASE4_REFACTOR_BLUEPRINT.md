@@ -39,11 +39,11 @@ with the complete standard suite and an independent security audit.
 ### Contracts
 
 - `ComplianceEngine`: KYC, roles, jurisdictions, blacklist, per-token
-  whitelist, limits, and holder tracking.
-- `RWAToken`: two-decimal permissioned token with pause, mint, burn, allowance,
-  and transfer compliance hooks.
-- `AssetManager`: issuance, valuation/supply peg, deposit, redemption, and
-  asset status lifecycle.
+  whitelist, asset-manager binding, limits, and holder tracking.
+- `RWAToken`: two-decimal permissioned token with an immutable supply
+  controller, pause, allowance, and transfer compliance hooks.
+- `AssetManager`: the exclusive mint/burn controller, issuance,
+  valuation/supply peg, deposit, redemption, and asset status lifecycle.
 - `OracleManager`: controlled valuation input.
 
 ## Security Invariants
@@ -59,6 +59,11 @@ with the complete standard suite and an independent security audit.
 7. Only registered token contracts can update holder state.
 8. KYC, blacklist, whitelist, role, valuation, and asset status writes are
    role restricted.
+9. A token can be registered only by its immutable supply controller.
+10. Global issuers and administrators cannot call token `mint` or `burnFrom`
+    unless they are the bound controller.
+11. For the current 1:1 MVP, asset valuation, manager token units, and token
+    `totalSupply` remain equal after every deposit and redemption.
 
 ## Audit Evidence
 

@@ -53,6 +53,7 @@ interface ComplianceRegistry {
         external
         view
         returns (address token, uint256 totalValuation, ComplianceStandard standard, AssetStatus status);
+    function getAssetManager(string calldata assetId) external view returns (address);
     function setAssetLimits(string calldata assetId, uint256 holderLimit, uint256 maxHoldingPerAccount) external;
 
     function setWhitelisted(address token, address user, bool allowed) external;

@@ -18,6 +18,7 @@ export const complianceEngineABI = [
   'function updateAssetStatus(string assetId, uint8 status)',
   'function updateAssetValuation(string assetId, uint256 totalValuation)',
   'function getAssetDetails(string assetId) view returns (address token, uint256 totalValuation, uint8 standard, uint8 status)',
+  'function getAssetManager(string assetId) view returns (address)',
   'event KYCVerified(address indexed user, string indexed verificationId, uint256 timestamp)',
   'event AssetRegistered(string indexed assetId, address indexed token, uint8 standard)',
   'event AssetStatusChanged(string indexed assetId, uint8 status)'
@@ -42,11 +43,11 @@ export const rwaTokenABI = [
   'function symbol() view returns (string)',
   'function decimals() view returns (uint8)',
   'function totalSupply() view returns (uint256)',
+  'function supplyController() view returns (address)',
   'function balanceOf(address user) view returns (uint256)',
   'function transfer(address to, uint256 value) returns (bool)',
   'function approve(address spender, uint256 value) returns (bool)',
   'function transferFrom(address from, address to, uint256 value) returns (bool)',
-  'function burn(uint256 value)',
   'event Transfer(address indexed from, address indexed to, uint256 value)'
 ]
 

@@ -15,7 +15,8 @@ describe("RWAToken compliance enforcement", function () {
       "Property Dollar",
       "PD",
       2,
-      await compliance.getAddress()
+      await compliance.getAddress(),
+      issuer.address
     );
     await compliance.registerAsset(
       "property-1",
@@ -37,11 +38,27 @@ describe("RWAToken compliance enforcement", function () {
     expect(await token.balanceOf(issuer.address)).to.equal(12345n);
   });
 
-  it("rejects minting by non-issuers and transfers to non-KYC wallets", async function () {
-    await expect(token.connect(outsider).mint(outsider.address, 100)).to.be.revertedWith(
-      "Not authorized issuer"
+  it("allows only the immutable supply controller to mint and burn", async function () {
+    await compliance.assignRole(outsider.address, 0);
+    await expect(token.connect(outsider).mint(issuer.address, 100)).to.be.revertedWith(
+      "Not supply controller"
     );
     await token.mint(issuer.address, ethers.parseUnits("10", 2));
+    await expect(token.connect(outsider).burnFrom(issuer.address, 100)).to.be.revertedWith(
+      "Not supply controller"
+    );
+  });
+
+  it("rejects direct holder burns and transfers to non-KYC wallets", async function () {
+    await token.mint(issuer.address, ethers.parseUnits("10", 2));
+    const burnSelector = ethers.id("burn(uint256)").slice(0, 10);
+    const burnAmount = ethers.AbiCoder.defaultAbiCoder().encode(["uint256"], [100]).slice(2);
+    await expect(
+      issuer.sendTransaction({
+        to: await token.getAddress(),
+        data: `${burnSelector}${burnAmount}`
+      })
+    ).to.be.reverted;
     await expect(token.transfer(outsider.address, 100)).to.be.revertedWith(
       "Recipient KYC not verified"
     );

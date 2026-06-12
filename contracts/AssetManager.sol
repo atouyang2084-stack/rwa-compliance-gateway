@@ -92,7 +92,7 @@ contract AssetManager {
         require(initialValue > 0, "Initial value required");
         require(complianceRegistry.isKYCVerified(msg.sender), "KYC verification required");
 
-        RWAToken token = new RWAToken(name, symbol, 2, address(complianceRegistry));
+        RWAToken token = new RWAToken(name, symbol, 2, address(complianceRegistry), address(this));
         assets[assetId] = Asset(assetId, name, symbol, initialValue, initialValue, address(token), true);
         assetIds.push(assetId);
 
@@ -197,7 +197,9 @@ contract AssetManager {
 
     function checkPegStatus(string calldata assetId) external view returns (bool, uint256, uint256) {
         Asset storage asset = _asset(assetId);
-        return (asset.totalValue == asset.totalTokens, asset.totalValue, asset.totalTokens);
+        bool pegged = asset.totalValue == asset.totalTokens
+            && asset.totalTokens == RWAToken(asset.tokenAddress).totalSupply();
+        return (pegged, asset.totalValue, asset.totalTokens);
     }
 
     function _activeAsset(string memory assetId) internal view returns (Asset storage asset) {

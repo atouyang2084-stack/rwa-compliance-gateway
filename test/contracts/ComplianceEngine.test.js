@@ -17,7 +17,8 @@ describe("ComplianceEngine defensive controls", function () {
       "RWA Demo",
       "RWAD",
       2,
-      await compliance.getAddress()
+      await compliance.getAddress(),
+      admin.address
     );
     await token.waitForDeployment();
 
@@ -60,7 +61,8 @@ describe("ComplianceEngine defensive controls", function () {
       "Other",
       "OTHER",
       2,
-      await compliance.getAddress()
+      await compliance.getAddress(),
+      admin.address
     );
     const [allowed, reason] = await compliance.isTransferAllowed(
       await unregistered.getAddress(),
@@ -84,5 +86,38 @@ describe("ComplianceEngine defensive controls", function () {
     await expect(
       token.transfer(investor.address, ethers.parseUnits("50.01", 2))
     ).to.be.revertedWith("Exceeds maximum holding per account");
+  });
+
+  it("isolates valuation and whitelist writes from unrelated issuers", async function () {
+    await compliance.assignRole(attacker.address, 0);
+
+    await expect(
+      compliance.connect(attacker).updateAssetValuation("asset-1", ethers.parseUnits("2000", 2))
+    ).to.be.revertedWith("Not asset manager");
+    await expect(
+      compliance.connect(attacker).setWhitelisted(await token.getAddress(), attacker.address, true)
+    ).to.be.revertedWith("Not authorized for asset");
+
+    expect(await compliance.getAssetManager("asset-1")).to.equal(admin.address);
+  });
+
+  it("rejects asset registration by a caller that is not the token controller", async function () {
+    const foreignToken = await (await ethers.getContractFactory("RWAToken")).deploy(
+      "Foreign",
+      "FRN",
+      2,
+      await compliance.getAddress(),
+      admin.address
+    );
+    await compliance.assignRole(attacker.address, 0);
+
+    await expect(
+      compliance.connect(attacker).registerAsset(
+        "foreign-asset",
+        await foreignToken.getAddress(),
+        0,
+        ethers.parseUnits("100", 2)
+      )
+    ).to.be.revertedWith("Caller is not token controller");
   });
 });

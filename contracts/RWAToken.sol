@@ -9,6 +9,7 @@ contract RWAToken {
     uint8 public immutable decimals;
     uint256 public totalSupply;
     ComplianceRegistry public immutable complianceRegistry;
+    address public immutable supplyController;
     mapping(address => uint256) public balanceOf;
     mapping(address => mapping(address => uint256)) public allowance;
     bool public paused;
@@ -31,12 +32,25 @@ contract RWAToken {
         entered = false;
     }
 
-    constructor(string memory name_, string memory symbol_, uint8 decimals_, address registry_) {
+    modifier onlySupplyController() {
+        require(msg.sender == supplyController, "Not supply controller");
+        _;
+    }
+
+    constructor(
+        string memory name_,
+        string memory symbol_,
+        uint8 decimals_,
+        address registry_,
+        address supplyController_
+    ) {
         require(registry_ != address(0), "Invalid registry");
+        require(supplyController_ != address(0), "Invalid supply controller");
         name = name_;
         symbol = symbol_;
         decimals = decimals_;
         complianceRegistry = ComplianceRegistry(registry_);
+        supplyController = supplyController_;
     }
 
     function pause() external {
@@ -74,8 +88,7 @@ contract RWAToken {
         return true;
     }
 
-    function mint(address to, uint256 value) external nonReentrant whenNotPaused {
-        require(complianceRegistry.hasRole(msg.sender, ComplianceRegistry.Role.Issuer), "Not authorized issuer");
+    function mint(address to, uint256 value) external onlySupplyController nonReentrant whenNotPaused {
         (bool allowed, string memory reason) =
             complianceRegistry.isTransferAllowed(address(this), address(0), to, value);
         require(allowed, reason);
@@ -85,12 +98,7 @@ contract RWAToken {
         complianceRegistry.created(to);
     }
 
-    function burn(uint256 value) external nonReentrant whenNotPaused {
-        _burn(msg.sender, value);
-    }
-
-    function burnFrom(address from, uint256 value) external nonReentrant whenNotPaused {
-        require(complianceRegistry.hasRole(msg.sender, ComplianceRegistry.Role.Issuer), "Not authorized issuer");
+    function burnFrom(address from, uint256 value) external onlySupplyController nonReentrant whenNotPaused {
         _burn(from, value);
     }
 
